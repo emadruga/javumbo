@@ -1,0 +1,33 @@
+# Node Dependencies (Client)
+client/node_modules/
+client/dist/ # Vite build output (if you build for production)
+client/.vite/ # Vite cache
+
+# Python Virtual Environment (Server)
+server/server_venv/
+# Add other common venv names if you use them, e.g.
+# venv/
+# .venv/
+
+# Python Cache
+server/__pycache__/
+*.pyc
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor configuration
+.vscode/
+.idea/
+
+# Log files (if any are generated later)
+*.log
+
+# Sensitive Data & User-Generated Content
+server/admin.db
+server/user_dbs/
+server/exports/
+
+# Environment variables file (if used later)
+.env*
