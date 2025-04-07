@@ -1,8 +1,9 @@
 import React, { useState/* , useEffect */ } from 'react'; // Comment out useEffect
 import { Routes, Route, useNavigate/* , useLocation */ } from 'react-router-dom'; // Comment out useLocation
 import AuthPage from './pages/AuthPage.jsx';
-import ReviewPage from './pages/ReviewPage.jsx';
-import AddCardPage from './pages/AddCardPage.jsx'; // Import the new page
+import ReviewPage from './components/ReviewPage.jsx'; // Uncomment
+import AddCardPage from './components/AddCardPage.jsx'; // Uncomment
+import DecksPage from './pages/DecksPage.jsx'; // Uncomment
 import api from './api/axiosConfig.js'; // Import configured Axios instance
 
 function App() {
@@ -15,20 +16,19 @@ function App() {
   const handleLoginSuccess = (userData) => {
     console.log("App.jsx: Login successful:", userData);
     setUser(userData);
-    navigate('/review'); // Navigate to review page after login
+    navigate('/decks'); // Restore navigation to decks
+    // navigate('/'); // Navigate to root after login for testing
   };
 
-  const handleLogout = async () => {
+  const handleLogout = async () => { // Uncomment
     console.log("App.jsx: Initiating logout...");
     try {
       await api.post('/logout');
       setUser(null);
-      navigate('/'); // Navigate back to auth page
+      navigate('/'); 
       console.log("App.jsx: Logout successful");
     } catch (error) {
       console.error("App.jsx: Logout failed:", error);
-      // Handle logout error (e.g., display message)
-      // Force logout on client even if server fails?
       setUser(null);
       navigate('/');
     }
@@ -45,29 +45,28 @@ function App() {
   //   // }
   // }, [user, navigate, location.pathname]);
 
-  console.log("Rendering App with full routes including /add...");
+  console.log("Rendering App (Restored)...");
 
   return (
     <div className="App">
-      {/* <h1>Flashcard App Shell</h1> Removed testing title */}
+      {/* <h1>Testing - App Shell Rendered</h1> */}{/* Remove test heading */}
       <Routes>
         <Route 
             path="/"
             element={<AuthPage onLoginSuccess={handleLoginSuccess} />}
         />
-        {/* Protect the review route */}
         <Route
-          path="/review"
-          element={user ? <ReviewPage user={user} onLogout={handleLogout} /> : <AuthPage onLoginSuccess={handleLoginSuccess} />}
-          // Consider a more robust protected route component later
+            path="/decks"
+            element={user ? <DecksPage user={user} onLogout={handleLogout} /> : <AuthPage onLoginSuccess={handleLoginSuccess} />}
         />
-        {/* Add route for AddCardPage */}
         <Route
-          path="/add"
-          element={user ? <AddCardPage user={user} onLogout={handleLogout} /> : <AuthPage onLoginSuccess={handleLoginSuccess} />}
+           path="/review"
+           element={user ? <ReviewPage user={user} onLogout={handleLogout} /> : <AuthPage onLoginSuccess={handleLoginSuccess} />}
         />
-         {/* Add a catch-all or Not Found route if needed */}
-         {/* <Route path="*" element={<div>Page Not Found</div>} /> */}
+        <Route
+           path="/add"
+           element={user ? <AddCardPage user={user} onLogout={handleLogout} /> : <AuthPage onLoginSuccess={handleLoginSuccess} />}
+        />
       </Routes>
     </div>
   );

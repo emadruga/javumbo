@@ -42,30 +42,23 @@ const buttonStyle = {
     border: '1px solid #ccc'
 };
 
-const exportButtonStyle = {...buttonStyle, backgroundColor: '#6c757d', color: 'white'};
 const logoutButtonStyle = {...buttonStyle, backgroundColor: '#ffc107', color: 'black'};
 
-function Header({ user, onLogout, onExport, isExporting }) {
+function Header({ user, onLogout }) {
   const location = useLocation(); // Hook to check current path
 
   // Function to determine link style based on current path
   const getLinkStyle = (path) => {
-    return location.pathname === path ? activeLinkStyle : linkStyle;
+    return location.pathname.startsWith(path) ? activeLinkStyle : linkStyle; // Use startsWith for /review matching
   };
 
   return (
     <header style={headerStyle}>
       <nav style={navLinksStyle}>
-        <Link to="/review" style={getLinkStyle('/review')}>Review Cards</Link>
+        <Link to="/decks" style={getLinkStyle('/decks')}>Decks</Link>
         <Link to="/add" style={getLinkStyle('/add')}>Add Card</Link>
       </nav>
       <div style={userInfoStyle}>
-        {/* Conditionally render export button if handler is provided */}
-        {onExport && (
-            <button onClick={onExport} disabled={isExporting} style={exportButtonStyle}>
-                {isExporting ? 'Exporting...' : 'Export Deck'}
-            </button>
-        )}
         <span>Welcome, {user?.name || 'User'}!</span>
         <button onClick={onLogout} style={logoutButtonStyle}>Logout</button>
       </div>

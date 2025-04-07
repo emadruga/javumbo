@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import 'bootstrap/dist/css/bootstrap.min.css'; // Add Bootstrap CSS import
 // import './index.css' // Remove this line - file was deleted
 import App from './App.jsx'
 import { BrowserRouter } from 'react-router-dom'; // Restore this import

@@ -21,7 +21,6 @@ function ReviewPage({ user, onLogout }) {
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [isExporting, setIsExporting] = useState(false);
 
   const fetchNextCard = useCallback(async () => {
     setIsLoading(true);
@@ -82,55 +81,11 @@ function ReviewPage({ user, onLogout }) {
     // No finally setIsLoading(false) here, as fetchNextCard handles it
   };
 
-  const handleExport = async () => {
-      setIsExporting(true);
-      setError('');
-      try {
-          const response = await api.get('/export', {
-              responseType: 'blob', // Important to handle binary file data
-          });
-
-          // Extract filename from content-disposition header if possible
-          const contentDisposition = response.headers['content-disposition'];
-          let filename = 'flashcard_export.apkg'; // Default filename
-          if (contentDisposition) {
-              const filenameMatch = contentDisposition.match(/filename="?([^;"]+)"?/);
-              if (filenameMatch && filenameMatch[1]) {
-                  filename = filenameMatch[1];
-              }
-          }
-
-          fileDownload(response.data, filename);
-          alert('Export successful! Check your downloads.');
-
-      } catch (err) {
-          console.error("Export error:", err);
-          if (err.response && err.response.data) {
-              // Try to read error message from blob response if possible
-              try {
-                   const errorJson = JSON.parse(await err.response.data.text());
-                   setError(errorJson.error || 'Export failed.');
-              } catch (parseError) {
-                   setError('Export failed. Unable to parse server error.');
-              }
-          } else {
-            setError('Export failed. Check server connection.');
-          }
-            if (err.response?.status === 401) {
-               onLogout();
-            }
-      } finally {
-          setIsExporting(false);
-      }
-  };
-
   return (
     <div style={pageStyle}>
       <Header
         user={user}
         onLogout={onLogout}
-        onExport={handleExport}
-        isExporting={isExporting}
       />
 
       <h1>Review Flashcards</h1>

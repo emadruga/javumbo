@@ -10,10 +10,12 @@ import zipfile
 import hashlib # For Anki checksum
 import shutil # For file operations (copying)
 import tempfile # For creating temporary directories
+import logging # Import logging module
+import traceback # Keep for explicit exception logging if needed
 
 # Get the directory where app.py resides
 basedir = os.path.abspath(os.path.dirname(__file__))
-print(f"Base directory detected: {basedir}") # Add log to confirm
+# print(f"Base directory detected: {basedir}") # Replaced by logger
 
 # --- Configuration ---
 PORT = 8000
@@ -27,6 +29,13 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 CORS(app, supports_credentials=True) # Allow cross-origin requests, necessary for React dev server
 
+# --- Logging Configuration ---
+# Configure basic logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s')
+# You can customize the format further if needed
+app.logger.info(f"Base directory detected: {basedir}")
+
 # --- Helper Functions ---
 def get_user_db_path(user_id):
     """Returns the path to the user's specific flashcard database."""
@@ -34,7 +43,7 @@ def get_user_db_path(user_id):
     db_dir = os.path.join(basedir, 'user_dbs') # Path relative to app.py
     if not os.path.exists(db_dir):
         os.makedirs(db_dir)
-        print(f"Created user DB directory: {db_dir}")
+        app.logger.info(f"Created user DB directory: {db_dir}") # Use logger
     return os.path.join(db_dir, f'user_{user_id}.db')
 
 def sha1_checksum(data):
@@ -59,17 +68,17 @@ def init_admin_db():
     """)
     conn.commit()
     conn.close()
-    print(f"Admin database \'{ADMIN_DB_PATH}\' initialized.")
+    app.logger.info(f"Admin database '{ADMIN_DB_PATH}' initialized.") # Use logger
 
 def init_anki_db(db_path, user_name="Default User"):
     """Initializes a new Anki-compatible SQLite database at the specified path,
     using the provided user_name for the default deck.
     """
     if os.path.exists(db_path):
-        print(f"Anki DB already exists at '{db_path}'")
+        app.logger.debug(f"Anki DB already exists at '{db_path}'") # Use logger (DEBUG level)
         return # Avoid re-initializing
 
-    print(f"Initializing Anki DB schema in '{db_path}'...")
+    app.logger.info(f"Initializing Anki DB schema in '{db_path}'...") # Use logger
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -151,12 +160,13 @@ def init_anki_db(db_path, user_name="Default User"):
     # Populate 'col' table with default Anki data
     crt_time = int(time.time())
     mod_time_ms = int(time.time() * 1000)
-    scm_time_ms = mod_time_ms # Schema mod time often same as mod time initially
+    scm_time_ms = mod_time_ms
 
     default_conf = {
         "nextPos": 1, "estTimes": True, "activeDecks": [1], "sortType": "noteFld",
-        "timeLim": 0, "sortBackwards": False, "addToCur": True, "curDeck": 1,
-        "newBury": True, "newSpread": 0, "dueCounts": True, "curModel": "1", # Model ID
+        "timeLim": 0, "sortBackwards": False, "addToCur": True,
+        "curDeck": 1,
+        "newBury": True, "newSpread": 0, "dueCounts": True, "curModel": "1",
         "collapseTime": 1200
     }
 
@@ -230,7 +240,7 @@ def init_anki_db(db_path, user_name="Default User"):
 
     conn.commit()
     conn.close()
-    print(f"Initialized Anki DB schema in '{db_path}'")
+    app.logger.info(f"Initialized Anki DB schema in '{db_path}'") # Use logger
 
 # --- API Routes (Placeholders) ---
 
@@ -267,7 +277,7 @@ def register():
                        (username, name, hashed_password.decode('utf-8')))
         admin_conn.commit()
         user_id = admin_cursor.lastrowid # Get the newly inserted user ID
-        print(f"User '{username}' registered successfully with ID: {user_id}")
+        app.logger.info(f"User '{username}' registered successfully with ID: {user_id}") # Use logger
 
         # --- Create User-Specific Anki DB --- ##
         user_db_path = get_user_db_path(user_id)
@@ -276,9 +286,9 @@ def register():
             # --- Add Initial Flashcards --- ##
             temp_model_id = "1700000000001"
             add_initial_flashcards(user_db_path, temp_model_id)
-            print(f"Added initial flashcards for user {user_id}")
+            app.logger.info(f"Added initial flashcards for user {user_id}") # Use logger
         except Exception as db_err:
-            print(f"ERROR: Failed to initialize Anki DB or add initial cards for user {user_id}: {db_err}")
+            app.logger.error(f"Failed to initialize Anki DB or add initial cards for user {user_id}: {db_err}") # Use logger
             return jsonify({"error": "Server error during user setup after registration."}), 500
         # --- ---
 
@@ -287,7 +297,7 @@ def register():
     except sqlite3.IntegrityError: # Handles UNIQUE constraint violation for username
         return jsonify({"error": "Username already exists"}), 409
     except Exception as e:
-        print(f"Error during registration: {e}")
+        app.logger.error(f"Error during registration: {e}") # Use logger
         return jsonify({"error": "An internal server error occurred"}), 500
     finally:
         if admin_conn:
@@ -315,7 +325,7 @@ def login():
             session['user_id'] = user['user_id']
             session['username'] = username
             session['name'] = user['name']
-            print(f"User '{username}' logged in successfully.")
+            app.logger.info(f"User '{username}' logged in successfully.") # Use logger
             return jsonify({
                 "message": "Login successful",
                 "user": {"user_id": user['user_id'], "username": username, "name": user['name']}
@@ -325,7 +335,7 @@ def login():
             return jsonify({"error": "Invalid username or password"}), 401
 
     except Exception as e:
-        print(f"Error during login: {e}")
+        app.logger.error(f"Error during login: {e}") # Use logger
         return jsonify({"error": "An internal server error occurred"}), 500
     finally:
         if conn:
@@ -337,7 +347,7 @@ def logout():
     session.pop('user_id', None)
     session.pop('username', None)
     session.pop('name', None)
-    print("User logged out.")
+    app.logger.info("User logged out.") # Use logger
     return jsonify({"message": "Logout successful"}), 200
 
 # TODO: Implement Flashcard routes (/review, /answer, /export)
@@ -426,7 +436,7 @@ def add_initial_flashcards(db_path, model_id):
 
         conn.commit()
     except Exception as e:
-        print(f"Error adding initial flashcards to {db_path}: {e}")
+        app.logger.error(f"Error adding initial flashcards to {db_path}: {e}") # Use logger
         if conn: conn.rollback() # Rollback changes if error occurs
         raise # Re-raise the exception to be caught by the caller
     finally:
@@ -453,6 +463,7 @@ def login_required(f):
 @app.route('/review', methods=['GET'])
 @login_required
 def get_next_card():
+    app.logger.debug(">>> Entering /review endpoint") # Use logger (DEBUG)
     user_id = session['user_id']
     user_db_path = get_user_db_path(user_id)
     conn = None
@@ -461,92 +472,115 @@ def get_next_card():
         return jsonify({"error": "User database not found. Please re-register or contact support."}), 404
 
     try:
+        app.logger.debug("--> Attempting to connect to DB...") # Use logger (DEBUG)
         conn = sqlite3.connect(user_db_path)
+        app.logger.debug("--> DB Connection successful.") # Use logger (DEBUG)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        app.logger.debug("--> Cursor created.") # Use logger (DEBUG)
+
+        app.logger.debug("--> Executing query for conf, crt...") # Use logger (DEBUG)
+        cursor.execute("SELECT conf, crt FROM col LIMIT 1")
+        app.logger.debug("--> Query for conf, crt executed.") # Use logger (DEBUG)
+        col_data = cursor.fetchone()
+        app.logger.debug(f"--> Fetched col_data: {col_data}") # Use logger (DEBUG)
+
+        conf_value = None
+        crt_value = None
+
+        if col_data:
+            try:
+                conf_value = col_data['conf']
+                app.logger.debug(f"--> Checking conf: Value exists") # Simplified log
+            except Exception as e:
+                app.logger.error(f"Accessing col_data['conf']: {e}") # Use logger
+            try:
+                crt_value = col_data['crt']
+                app.logger.debug(f"--> Checking crt: Value exists") # Simplified log
+            except Exception as e:
+                app.logger.error(f"Accessing col_data['crt']: {e}") # Use logger
+        else:
+            app.logger.error("col_data is None") # Use logger
+
+        if not col_data or conf_value is None or crt_value is None:
+             app.logger.error("Condition failed (col_data is None, or conf_value is None, or crt_value is None)") # Use logger
+             return jsonify({"error": "Collection configuration or creation time could not be read"}), 500
+        
+        app.logger.debug("--> Parsing conf JSON...") # Use logger (DEBUG)
+        conf_dict = json.loads(conf_value) 
+        app.logger.debug("--> Parsed conf JSON.") # Use logger (DEBUG)
+        crt_time_sec = crt_value 
+        current_deck_id = conf_dict.get('curDeck', 1)
+        app.logger.debug(f"--> Current Deck ID: {current_deck_id}, Crt Time: {crt_time_sec}") # Use logger (DEBUG)
 
         current_time_sec = int(time.time())
+        days_passed = (current_time_sec - crt_time_sec) // 86400
+        app.logger.debug(f"--> Calculated days_passed: {days_passed}") # Use logger (DEBUG)
 
-        # Simplified logic: Find the card with the smallest 'due' value
-        # Prioritizing New (queue=0), then Learning (queue=1, due <= now), then Review (queue=2, due <= now)
-        # Anki's actual scheduling is more complex (days for reviews, etc.)
-        # Queue values: 0=new, 1=lrn, 2=rev, 3=day lrn, -1=suspended, -2=buried
-        cursor.execute("""
+        app.logger.debug("--> Executing query for next card...") # Use logger (DEBUG)
+        cursor.execute(f"""
             SELECT c.id as card_id, c.nid, c.due, c.queue, n.flds
             FROM cards c
             JOIN notes n ON c.nid = n.id
-            WHERE c.queue >= 0 -- Not suspended or buried
-            ORDER BY
-                CASE c.queue
-                    WHEN 0 THEN 0 -- New cards first
-                    WHEN 1 THEN 1 -- Learning cards second
-                    WHEN 3 THEN 1 -- Day Learn cards also second
-                    WHEN 2 THEN 2 -- Review cards third
-                    ELSE 3
-                END,
-                c.due ASC
+            WHERE c.queue >= 0 AND c.did = ?
+            ORDER BY CASE c.queue WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 3 THEN 1 WHEN 2 THEN 2 ELSE 3 END, c.due ASC
             LIMIT 1
-        """)
+        """, (current_deck_id,))
+        app.logger.debug("--> Query for next card executed.") # Use logger (DEBUG)
         card_to_review = cursor.fetchone()
+        app.logger.debug(f"--> Fetched card_to_review: {card_to_review}") # Use logger (DEBUG)
 
         if card_to_review:
-            # Check if learning/review cards are actually due
             queue = card_to_review['queue']
             due = card_to_review['due']
 
             is_due = False
-            if queue == 0: # New cards are always "due"
+            if queue == 0:
                 is_due = True
-            elif queue == 1 or queue == 3: # Learning cards use epoch seconds
+            elif queue == 1 or queue == 3:
                 if due <= current_time_sec:
                     is_due = True
-            elif queue == 2: # Review cards use days - SIMPLIFIED CHECK FOR NOW
-                 # A proper check involves comparing 'due' (days) against days passed since collection creation.
-                 # For now, let's assume if it's the lowest due review card, we show it.
-                 # We will refine this in the /answer step with SM-2 logic.
-                 is_due = True # Simplified for now
-                 # TODO: Implement proper check based on collection creation date and current day
+            elif queue == 2:
+                 if due <= days_passed:
+                     is_due = True
 
             if is_due:
                 fields = card_to_review['flds'].split('\x1f')
                 front = fields[0]
-                back = fields[1] # Extract back content
-
-                # Store the current card ID in session for the /answer endpoint
+                back = fields[1]
                 session['current_card_id'] = card_to_review['card_id']
                 session['current_note_id'] = card_to_review['nid']
-                # No longer need to store fields in session if review sends both front/back
-                # session['current_card_flds'] = fields
-
-                print(f"Presenting card ID {card_to_review['card_id']} for user {user_id}")
+                app.logger.info(f"Presenting card ID {card_to_review['card_id']} for user {user_id}") # INFO level might be better
                 return jsonify({
                     "card_id": card_to_review['card_id'],
                     "front": front,
-                    "back": back, # Include back content in the response
+                    "back": back,
                     "queue": queue
                 }), 200
             else:
-                # The top card according to ORDER BY isn't actually due yet (likely future learning/review)
                 session.pop('current_card_id', None)
                 session.pop('current_note_id', None)
-                # session.pop('current_card_flds', None)
-                return jsonify({"message": "No cards due for review right now."}), 200
+                app.logger.debug(f"Card {card_to_review['card_id']} selected but not due yet") # Use logger (DEBUG)
+                return jsonify({"message": f"No cards due for deck {current_deck_id} right now."}), 200
         else:
-            # No cards found in any reviewable queue
             session.pop('current_card_id', None)
             session.pop('current_note_id', None)
-            # session.pop('current_card_flds', None)
-            return jsonify({"message": "No cards available for review."}), 200
+            app.logger.info(f"No cards available for review in deck {current_deck_id} for user {user_id}.") # INFO level
+            return jsonify({"message": f"No cards available for review in deck {current_deck_id}."}), 200
 
-    except sqlite3.Error as e:
-        print(f"Database error fetching review card for user {user_id}: {e}")
-        return jsonify({"error": "Database error occurred"}), 500
+    except sqlite3.Error as db_err:
+        app.logger.error(f"Database error fetching review card: {db_err}") # Use logger
+        return jsonify({"error": f"Database error occurred: {db_err}"}), 500
     except Exception as e:
-        print(f"Error fetching review card for user {user_id}: {e}")
+        app.logger.exception(f"UNEXPECTED Error fetching review card for user {user_id}: {e}") 
         return jsonify({"error": "An internal server error occurred"}), 500
     finally:
+        app.logger.debug("--> Entering finally block for /review") # Use logger (DEBUG)
         if conn:
+            app.logger.debug("--> Closing DB connection.") # Use logger (DEBUG)
             conn.close()
+        else:
+            app.logger.debug("--> No DB connection to close.") # Use logger (DEBUG)
 
 @app.route('/answer', methods=['POST'])
 @login_required
@@ -762,16 +796,16 @@ def answer_card():
 
         # --- Return Answer --- #
         # answer = fields[1] # No longer need to extract answer here
-        print(f"Processed answer for card ID {card_id} for user {user_id} with ease {ease}")
+        app.logger.info(f"Processed answer for card ID {card_id} for user {user_id} with ease {ease}") # INFO level
         # Return simple success message instead of answer content
         return jsonify({"message": "Answer processed successfully"}), 200
 
     except sqlite3.Error as e:
-        print(f"Database error processing answer for user {user_id}, card {card_id}: {e}")
+        app.logger.error(f"Database error processing answer for user {user_id}, card {card_id}: {e}") # Use logger
         if conn: conn.rollback()
         return jsonify({"error": "Database error occurred during review update"}), 500
     except Exception as e:
-        print(f"Error processing answer for user {user_id}, card {card_id}: {e}")
+        app.logger.exception(f"Error processing answer for user {user_id}, card {card_id}: {e}") # Use logger.exception
         if conn: conn.rollback()
         # Potentially clear session variables here too?
         session.pop('current_card_id', None)
@@ -798,18 +832,18 @@ def export_deck():
     try:
         # Create a temporary directory for staging the APKG contents
         temp_dir = tempfile.mkdtemp()
-        print(f"Created temporary directory for export: {temp_dir}")
+        app.logger.info(f"Created temporary directory for export: {temp_dir}") # Use logger
 
         # 1. Copy the user's database to the temp dir as collection.anki2
         anki2_path = os.path.join(temp_dir, 'collection.anki2')
         shutil.copy2(user_db_path, anki2_path) # copy2 preserves metadata
-        print(f"Copied user DB to {anki2_path}")
+        app.logger.info(f"Copied user DB to {anki2_path}") # Use logger
 
         # 2. Create the media file (required by Anki, even if empty)
         media_path = os.path.join(temp_dir, 'media')
         with open(media_path, 'w') as f:
             json.dump({}, f) # Empty JSON object for no media
-        print(f"Created empty media file at {media_path}")
+        app.logger.info(f"Created empty media file at {media_path}") # Use logger
 
         # 3. Create the APKG zip file
         timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -819,12 +853,12 @@ def export_deck():
         # Ensure export directory exists
         if not os.path.exists(EXPORT_DIR):
             os.makedirs(EXPORT_DIR)
-            print(f"Created export directory: {EXPORT_DIR}")
+            app.logger.info(f"Created export directory: {EXPORT_DIR}")
 
         with zipfile.ZipFile(apkg_path, 'w', zipfile.ZIP_DEFLATED) as zf:
             zf.write(anki2_path, arcname='collection.anki2')
             zf.write(media_path, arcname='media')
-        print(f"Created APKG file at {apkg_path}")
+        app.logger.info(f"Created APKG file at {apkg_path}") # Use logger
 
         # 4. Send the file to the user
         return send_file(
@@ -835,21 +869,21 @@ def export_deck():
         )
 
     except Exception as e:
-        print(f"Error during APKG export for user {user_id}: {e}")
+        app.logger.exception(f"Error during APKG export for user {user_id}: {e}") # Use logger.exception
         # Clean up temporary directory if it exists, even on error
         if temp_dir and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
-                print(f"Cleaned up temporary directory: {temp_dir}")
+                app.logger.info(f"Cleaned up temporary directory: {temp_dir}") # Use logger
             except Exception as cleanup_err:
-                print(f"Error cleaning up temp directory {temp_dir}: {cleanup_err}")
+                app.logger.error(f"Error cleaning up temp directory {temp_dir}: {cleanup_err}") # Use logger
         # Clean up partial apkg file if it exists
         if apkg_path and os.path.exists(apkg_path):
              try:
                  os.remove(apkg_path)
-                 print(f"Cleaned up partial APKG file: {apkg_path}")
+                 app.logger.info(f"Cleaned up partial APKG file: {apkg_path}") # Use logger
              except Exception as cleanup_err:
-                 print(f"Error cleaning up APKG file {apkg_path}: {cleanup_err}")
+                 app.logger.error(f"Error cleaning up APKG file {apkg_path}: {cleanup_err}") # Use logger
 
         return jsonify({"error": "Failed to generate export file."}), 500
     finally:
@@ -857,9 +891,9 @@ def export_deck():
         if temp_dir and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
-                print(f"Cleaned up temporary directory after request: {temp_dir}")
+                app.logger.info(f"Cleaned up temporary directory after request: {temp_dir}") # Use logger
             except Exception as cleanup_err:
-                print(f"Error cleaning up temp directory {temp_dir} in finally block: {cleanup_err}")
+                app.logger.error(f"Error cleaning up temp directory {temp_dir} in finally block: {cleanup_err}") # Use logger
         # Clean up the created APKG file from the server *after* sending is complete
         # Note: Flask's send_file typically handles this if using TemporaryFile,
         # but since we save it first, we clean it up manually. Be careful with background tasks.
@@ -872,9 +906,9 @@ def export_deck():
                  # Consider adding a small delay or using Flask's after_request handler.
                  # time.sleep(1) # Small delay as a simple precaution
                  os.remove(apkg_path)
-                 print(f"Cleaned up APKG file after request: {apkg_path}")
+                 app.logger.info(f"Cleaned up APKG file after request: {apkg_path}") # Use logger
              except Exception as cleanup_err:
-                 print(f"Error cleaning up APKG file {apkg_path} in finally block: {cleanup_err}")
+                 app.logger.error(f"Error cleaning up APKG file {apkg_path} in finally block: {cleanup_err}") # Use logger
 
 # --- Add Card Logic ---
 @app.route('/add_card', methods=['POST'])
@@ -893,26 +927,24 @@ def add_new_card():
     conn = None
     try:
         conn = sqlite3.connect(user_db_path)
-        conn.row_factory = sqlite3.Row # Optional, but can be helpful
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        # --- Fetch necessary IDs from the 'col' table --- #
-        # We need the current default model ID. We hardcoded this during init,
-        # but fetching is more robust if models change later.
-        # Assuming the first model is the one we want.
-        cursor.execute("SELECT models FROM col LIMIT 1")
+        # Get current model ID and current deck ID
+        cursor.execute("SELECT models, conf FROM col LIMIT 1")
         col_data = cursor.fetchone()
-        if not col_data or not col_data['models']:
+        if not col_data or not col_data['models'] or not col_data['conf']:
             return jsonify({"error": "Collection configuration not found or invalid"}), 500
-        
+
         models = json.loads(col_data['models'])
-        # Find the first model ID (key) in the models dictionary
+        conf_dict = json.loads(col_data['conf'])
         model_id = next(iter(models), None)
+        current_deck_id = conf_dict.get('curDeck', 1) # Get current deck ID
+
         if not model_id:
              return jsonify({"error": "Default note model not found in collection"}), 500
 
-        # Assume Deck ID 1 (Default deck)
-        deck_id = 1 
+        # deck_id = 1 # No longer assume deck 1
 
         # --- Generate New Note/Card Data --- #
         current_time_sec = int(time.time())
@@ -929,49 +961,186 @@ def add_new_card():
             INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            note_id, guid, model_id, current_time_sec, usn, "", # Empty tags for now
+            note_id, guid, model_id, current_time_sec, usn, "",
             fields, front, int(checksum, 16) & 0xFFFFFFFF, 0, ""
         ))
-        print(f"Inserted note {note_id} for user {user_id}")
+        app.logger.info(f"Inserted note {note_id} for user {user_id}") # Use logger
 
-        # --- Insert Card (as New card) --- #
+        # --- Insert Card (assign to current_deck_id) --- #
         cursor.execute("""
             INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            card_id, note_id, deck_id, 0, # ord=0 for the first template
+            card_id, note_id, current_deck_id, 0, # <<< Use current_deck_id for did
             current_time_sec, usn,
-            0, # type = new
-            0, # queue = new
-            note_id, # due = note id for new cards (Anki convention)
-            0, # ivl
-            2500, # factor (initial ease factor)
-            0, # reps
-            0, # lapses
-            0, # left (learning steps remaining)
-            0, # odue (original due)
-            0, # odid (original deck id)
-            0, # flags
-            "" # data
+            0, 0, note_id, # type, queue, due
+            0, 2500, 0, 0, 0, 0, 0, 0, "" # ivl, factor, reps, lapses, left, odue, odid, flags, data
         ))
-        print(f"Inserted card {card_id} for note {note_id}, user {user_id}")
+        app.logger.info(f"Inserted card {card_id} into deck {current_deck_id} for note {note_id}, user {user_id}") # Use logger
 
         # --- Update Collection Mod Time --- #
-        # Important for Anki clients to detect changes
         cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
-
         conn.commit()
 
         return jsonify({"message": "Card added successfully", "note_id": note_id, "card_id": card_id}), 201
 
     except sqlite3.Error as e:
-        print(f"Database error adding card for user {user_id}: {e}")
+        app.logger.error(f"Database error adding card for user {user_id}: {e}") # Use logger
         if conn: conn.rollback()
         return jsonify({"error": "Database error occurred while adding card"}), 500
     except Exception as e:
-        print(f"Error adding card for user {user_id}: {e}")
+        app.logger.exception(f"Error adding card for user {user_id}: {e}") # Use logger.exception
         if conn: conn.rollback()
         return jsonify({"error": "An internal server error occurred"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- Deck Management API ---
+
+@app.route('/decks', methods=['GET'])
+@login_required
+def get_decks():
+    """Fetches the list of decks for the current user."""
+    user_id = session['user_id']
+    user_db_path = get_user_db_path(user_id)
+    conn = None
+    try:
+        conn = sqlite3.connect(user_db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        if not col_data or not col_data['decks']:
+            return jsonify({"error": "Collection data not found or invalid"}), 500
+
+        decks_dict = json.loads(col_data['decks'])
+        # Convert dictionary to list of objects expected by frontend
+        decks_list = [{"id": k, "name": v["name"]} for k, v in decks_dict.items()]
+        # Sort by name for consistency
+        decks_list.sort(key=lambda x: x["name"])
+
+        return jsonify(decks_list), 200
+
+    except Exception as e:
+        app.logger.exception(f"Error fetching decks for user {user_id}: {e}") # Use logger.exception
+        return jsonify({"error": "Failed to fetch decks"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/decks', methods=['POST'])
+@login_required
+def create_deck():
+    """Creates a new deck for the current user."""
+    user_id = session['user_id']
+    user_db_path = get_user_db_path(user_id)
+
+    data = request.get_json()
+    deck_name = data.get('name')
+    if not deck_name or not deck_name.strip():
+        return jsonify({"error": "Deck name cannot be empty"}), 400
+    deck_name = deck_name.strip()
+
+    conn = None
+    try:
+        conn = sqlite3.connect(user_db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Fetch current decks and dconf
+        cursor.execute("SELECT decks, dconf FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        if not col_data:
+            return jsonify({"error": "Collection data not found"}), 500
+
+        decks_dict = json.loads(col_data['decks'])
+        dconf_dict = json.loads(col_data['dconf'])
+
+        # Generate new deck ID (using epoch ms)
+        new_deck_id = str(int(time.time() * 1000))
+
+        # Check for duplicate name (case-insensitive)
+        if any(d['name'].lower() == deck_name.lower() for d in decks_dict.values()):
+            return jsonify({"error": "A deck with this name already exists"}), 409
+
+        # Create new deck entry - using dconf ID '1' for simplicity for now
+        new_deck = {
+            "id": new_deck_id,
+            "name": deck_name,
+            "mod": int(time.time()),
+            "usn": -1,
+            "lrnToday": [0, 0], "revToday": [0, 0], "newToday": [0, 0],
+            "timeToday": [0, 0], "conf": 1, # Use default dconf '1'
+            "desc": "", "dyn": 0, "collapsed": False,
+            "extendNew": 10, "extendRev": 50
+        }
+        decks_dict[new_deck_id] = new_deck
+
+        # Update col table
+        current_mod_time = int(time.time() * 1000)
+        cursor.execute("UPDATE col SET decks = ?, mod = ?",
+                       (json.dumps(decks_dict), current_mod_time))
+        conn.commit()
+
+        app.logger.info(f"Created new deck '{deck_name}' (ID: {new_deck_id}) for user {user_id}") # Use logger
+        return jsonify({"id": new_deck_id, "name": deck_name}), 201
+
+    except Exception as e:
+        app.logger.exception(f"Error creating deck for user {user_id}: {e}") # Use logger.exception
+        if conn: conn.rollback()
+        return jsonify({"error": "Failed to create deck"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/decks/current', methods=['PUT'])
+@login_required
+def set_current_deck():
+    """Sets the current deck for the user."""
+    user_id = session['user_id']
+    user_db_path = get_user_db_path(user_id)
+
+    data = request.get_json()
+    deck_id = data.get('deckId') # Expecting deck ID as string or int
+    if deck_id is None:
+        return jsonify({"error": "Missing deckId"}), 400
+
+    conn = None
+    try:
+        conn = sqlite3.connect(user_db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Fetch current config and decks to validate deck_id
+        cursor.execute("SELECT conf, decks FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        if not col_data:
+            return jsonify({"error": "Collection data not found"}), 500
+
+        conf_dict = json.loads(col_data['conf'])
+        decks_dict = json.loads(col_data['decks'])
+
+        # Validate deck ID exists
+        if str(deck_id) not in decks_dict:
+            return jsonify({"error": "Invalid deck ID"}), 404
+
+        # Update current deck ID in conf
+        conf_dict['curDeck'] = int(deck_id) # Store as integer
+
+        # Update col table
+        current_mod_time = int(time.time() * 1000)
+        cursor.execute("UPDATE col SET conf = ?, mod = ?",
+                       (json.dumps(conf_dict), current_mod_time))
+        conn.commit()
+
+        app.logger.info(f"Set current deck to {deck_id} for user {user_id}") # Use logger
+        return jsonify({"message": "Current deck updated successfully"}), 200
+
+    except Exception as e:
+        app.logger.exception(f"Error setting current deck for user {user_id}: {e}") # Use logger.exception
+        if conn: conn.rollback()
+        return jsonify({"error": "Failed to set current deck"}), 500
     finally:
         if conn:
             conn.close()
@@ -981,5 +1150,5 @@ if __name__ == '__main__':
     # Initialize databases if they don't exist
     # TODO: Call database initialization functions here
     init_admin_db() # Initialize the admin database
-    print(f"Starting server on port {PORT}...")
+    app.logger.info(f"Starting server on port {PORT}...") # Use logger
     app.run(host='0.0.0.0', port=PORT, debug=True) # debug=True for development 
