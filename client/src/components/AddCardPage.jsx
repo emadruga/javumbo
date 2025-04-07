@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { addCard } from '../api';
 import { useNavigate } from 'react-router-dom';
 import Header from './Header';
@@ -8,7 +8,15 @@ function AddCardPage({ user, onLogout }) {
   const [back, setBack] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [currentDeckName, setCurrentDeckName] = useState('Default');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const storedDeckName = localStorage.getItem('currentDeckName');
+    if (storedDeckName) {
+      setCurrentDeckName(storedDeckName);
+    }
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -63,6 +71,7 @@ function AddCardPage({ user, onLogout }) {
         </div>
         <button type="submit" className="btn btn-primary">Add Card</button>
       </form>
+      <p className="mt-3 text-muted">Adding to deck: <strong>{currentDeckName}</strong></p>
     </div>
   );
 }

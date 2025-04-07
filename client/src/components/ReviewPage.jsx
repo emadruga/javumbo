@@ -7,13 +7,24 @@ function ReviewPage({ user, onLogout }) {
   const [card, setCard] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [startTime, setStartTime] = useState(null);
+  const [currentDeckName, setCurrentDeckName] = useState('Default');
   const [reviewMessage, setReviewMessage] = useState('Loading card...');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const storedDeckName = localStorage.getItem('currentDeckName');
+    if (storedDeckName) {
+      setCurrentDeckName(storedDeckName);
+      setReviewMessage(`Reviewing: ${storedDeckName}`);
+    } else {
+      setReviewMessage('Reviewing: Default');
+    }
+  }, []);
+
   const fetchReviewData = async (isMounted) => {
     setError('');
-    setReviewMessage('Loading card...');
+    setReviewMessage(prev => prev.startsWith('Reviewing:') ? prev : `Reviewing: ${currentDeckName} - Loading card...`);
     try {
       const nextCardData = await getNextCard();
       console.log("ReviewPage: Successfully fetched next card data:", nextCardData);
@@ -23,17 +34,17 @@ function ReviewPage({ user, onLogout }) {
         setCard(nextCardData);
         setShowAnswer(false);
         setStartTime(Date.now());
-        setReviewMessage('');
+        setReviewMessage(`Reviewing: ${currentDeckName}`);
       } else {
         setCard(null);
-        setReviewMessage(nextCardData.message || "No cards due right now.");
+        setReviewMessage(nextCardData.message || `No cards due in deck: ${currentDeckName}.`);
       }
     } catch (err) {
       if (!isMounted) return;
       console.error("ReviewPage: Error fetching review data:", err);
       setError(err.response?.data?.error || 'Failed to load review session');
       setCard(null);
-      setReviewMessage('');
+      setReviewMessage(`Error loading deck: ${currentDeckName}`);
     }
   };
 
@@ -54,12 +65,12 @@ function ReviewPage({ user, onLogout }) {
     try {
       await answerCard({ ease: ease, time_taken: timeTaken });
       setCard(null);
-      setReviewMessage('Loading next card...');
+      setReviewMessage(`Reviewing: ${currentDeckName} - Loading next card...`);
       let isMountedForNext = true;
       fetchReviewData(isMountedForNext);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to submit answer');
-      setReviewMessage('');
+      setReviewMessage(`Error submitting answer for deck: ${currentDeckName}`);
     }
   };
 
@@ -69,7 +80,7 @@ function ReviewPage({ user, onLogout }) {
       <h2>Review Cards</h2>
       {error && <div className="alert alert-danger mt-3">{error}</div>}
       
-      {!error && !card && reviewMessage && <p className="text-muted mt-2">{reviewMessage}</p>}
+      {!error && reviewMessage && <p className="text-muted mt-2">{reviewMessage}</p>}
 
       {!error && card ? (
         <div className="card mt-3">

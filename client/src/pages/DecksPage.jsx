@@ -126,6 +126,15 @@ function DecksPage({ user, onLogout }) {
     try {
         await api.put('/decks/current', { deckId });
         console.log(`Set current deck to ${deckId}`);
+
+        // Find the deck name from the state
+        const selectedDeck = decks.find(deck => deck.id === deckId);
+        const deckName = selectedDeck ? selectedDeck.name : 'Unknown Deck';
+
+        // Store the name in localStorage
+        localStorage.setItem('currentDeckName', deckName);
+        console.log(`Stored current deck name '${deckName}' in localStorage.`);
+
         navigate('/review'); // Navigate to review page for the selected deck
     } catch (err) {
         console.error("Error setting current deck:", err);
