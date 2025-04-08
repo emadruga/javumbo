@@ -207,12 +207,27 @@ function DecksPage({ user, onLogout }) {
           {decks.map((deck) => (
             <li key={deck.id} style={deckItemStyle}>
               <span style={deckNameStyle}>{deck.name}</span>
-              <button
-                onClick={() => handleSelectDeck(deck.id)}
-                style={reviewButtonStyle}
-              >
-                Review
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => handleSelectDeck(deck.id)}
+                  style={reviewButtonStyle}
+                  className="btn btn-success btn-sm"
+                >
+                  Review
+                </button>
+                <button
+                  onClick={() => {
+                    const deckName = deck.name || 'Unknown Deck';
+                    localStorage.setItem('currentDeckName', deckName);
+                    console.log(`Stored current deck name '${deckName}' for stats page.`);
+                    navigate(`/decks/${deck.id}/stats`);
+                  }}
+                  style={{...buttonStyle, backgroundColor: '#17a2b8'}}
+                  className="btn btn-info btn-sm"
+                >
+                  Stats
+                </button>
+              </div>
             </li>
           ))}
           {decks.length === 0 && !error && <p>You don't have any decks yet. Create one below!</p>}

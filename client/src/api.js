@@ -29,4 +29,13 @@ export const answerCard = async ({ ease, time_taken }) => {
 export const addCard = async ({ front, back }) => {
   const response = await axiosInstance.post('/add_card', { front, back });
   return response.data;
+};
+
+// Get statistics for a specific deck
+export const getDeckStats = async (deckId, timeframe = 'today') => {
+  // Note: Backend currently ignores timeframe parameter
+  const response = await axiosInstance.get(`/decks/${deckId}/stats`, {
+    // params: { timeframe } // Send timeframe if backend uses it
+  });
+  return response.data; // Expected: { counts: {...}, total: number }
 }; 

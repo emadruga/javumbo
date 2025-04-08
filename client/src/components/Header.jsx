@@ -1,67 +1,57 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
-// Basic styling (consider moving to CSS)
+// Basic inline styles (consider moving to CSS)
 const headerStyle = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  padding: '10px 20px', // Added horizontal padding
-  borderBottom: '1px solid #ccc',
-  marginBottom: '20px',
-  backgroundColor: '#f8f9fa' // Light background for header
+  padding: '1rem 0',
+  borderBottom: '1px solid #eee',
+  marginBottom: '1rem'
 };
 
-const navLinksStyle = {
+const navStyle = {
   display: 'flex',
-  gap: '15px'
-};
-
-const linkStyle = {
-  textDecoration: 'none',
-  color: '#007bff',
-  padding: '5px 0'
-};
-
-const activeLinkStyle = {
-    ...linkStyle,
-    fontWeight: 'bold',
-    borderBottom: '2px solid #007bff'
+  gap: '1rem'
 };
 
 const userInfoStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '15px'
+  display: 'flex',
+  alignItems: 'center',
+  gap: '1rem'
 };
-
-const buttonStyle = {
-    padding: '8px 15px',
-    cursor: 'pointer',
-    borderRadius: '4px',
-    border: '1px solid #ccc'
-};
-
-const logoutButtonStyle = {...buttonStyle, backgroundColor: '#ffc107', color: 'black'};
 
 function Header({ user, onLogout }) {
-  const location = useLocation(); // Hook to check current path
+  const navigate = useNavigate();
 
-  // Function to determine link style based on current path
-  const getLinkStyle = (path) => {
-    return location.pathname.startsWith(path) ? activeLinkStyle : linkStyle; // Use startsWith for /review matching
+  const handleLogoutClick = (e) => {
+    e.preventDefault();
+    if (typeof onLogout === 'function') {
+        onLogout();
+    } else {
+        console.error("onLogout prop is not a function or not provided");
+        // Fallback navigation if needed
+        // navigate('/'); 
+    }
   };
 
   return (
     <header style={headerStyle}>
-      <nav style={navLinksStyle}>
-        <Link to="/decks" style={getLinkStyle('/decks')}>Decks</Link>
-        <Link to="/add" style={getLinkStyle('/add')}>Add Card</Link>
+      <nav style={navStyle}>
+        <Link to="/decks">Decks</Link>
+        <Link to="/add">Add Card</Link>
+        {/* Review link might be less common in header, often accessed via deck */}
+        {/* <Link to="/review">Review</Link> */}
       </nav>
-      <div style={userInfoStyle}>
-        <span>Welcome, {user?.name || 'User'}!</span>
-        <button onClick={onLogout} style={logoutButtonStyle}>Logout</button>
-      </div>
+      {user && (
+        <div style={userInfoStyle}>
+          <span>Welcome, {user.name || user.username}!</span>
+          <button onClick={handleLogoutClick} className="btn btn-outline-secondary btn-sm">
+            Logout
+          </button>
+        </div>
+      )}
     </header>
   );
 }

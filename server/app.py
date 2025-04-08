@@ -12,6 +12,7 @@ import shutil # For file operations (copying)
 import tempfile # For creating temporary directories
 import logging # Import logging module
 import traceback # Keep for explicit exception logging if needed
+import datetime # Import datetime
 
 # Get the directory where app.py resides
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -1141,6 +1142,85 @@ def set_current_deck():
         app.logger.exception(f"Error setting current deck for user {user_id}: {e}") # Use logger.exception
         if conn: conn.rollback()
         return jsonify({"error": "Failed to set current deck"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/decks/<int:deck_id>/stats', methods=['GET'])
+@login_required
+def get_deck_stats(deck_id):
+    """Calculates and returns CURRENT card status counts for a specific deck."""
+    user_id = session['user_id']
+    user_db_path = get_user_db_path(user_id)
+    # Timeframe parameter is ignored
+    # timeframe = request.args.get('timeframe', 'today') 
+
+    # Remove timestamp calculation
+    # start_timestamp_ms = ... 
+
+    app.logger.debug(f"Deck stats requested for deck: {deck_id}") # Simplified log
+
+    conn = None
+    try:
+        conn = sqlite3.connect(user_db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Verify deck exists (as before)
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        if not col_data or not col_data['decks']:
+             return jsonify({"error": "Collection data not found."}), 500
+        decks_dict = json.loads(col_data['decks'])
+        if str(deck_id) not in decks_dict:
+             return jsonify({"error": "Deck not found or access denied."}), 404
+
+        # Query cards for the specific deck - id no longer needed for filtering New
+        cursor.execute("SELECT queue, ivl FROM cards WHERE did = ?", (deck_id,))
+        cards = cursor.fetchall()
+
+        counts = {
+            "New": 0, "Learning": 0, "Relearning": 0,
+            "Young": 0, "Mature": 0, "Suspended": 0, "Buried": 0
+        }
+        total_cards = 0
+
+        for card in cards:
+            total_cards += 1
+            queue = card['queue']
+            ivl = card['ivl']
+            # card_creation_ms = card['id'] # No longer needed
+
+            if queue == 0:
+                counts["New"] += 1 # Count ALL new cards
+            elif queue == 1:
+                counts["Learning"] += 1
+            elif queue == 3:
+                counts["Relearning"] += 1
+            elif queue == 2:
+                if ivl >= 21:
+                    counts["Mature"] += 1
+                else:
+                    counts["Young"] += 1
+            elif queue == -1:
+                counts["Suspended"] += 1
+            elif queue == -2 or queue == -3:
+                counts["Buried"] += 1
+
+        response_data = {
+            "counts": counts,
+            "total": total_cards # Total is now sum of counts
+            # "timeframe": "current" # Indicate it's current state
+        }
+
+        return jsonify(response_data), 200
+
+    except sqlite3.Error as e:
+        app.logger.error(f"Database error fetching stats for deck {deck_id}, user {user_id}: {e}")
+        return jsonify({"error": "Database error occurred while fetching statistics."}), 500
+    except Exception as e:
+        app.logger.exception(f"Error fetching stats for deck {deck_id}, user {user_id}: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
     finally:
         if conn:
             conn.close()
