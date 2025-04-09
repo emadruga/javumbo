@@ -271,3 +271,35 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
     *   `401 Unauthorized`: (See Authentication section).
     *   `404 Not Found`: The provided `deckId` does not exist in the user's collection (e.g., `{"error": "Invalid deck ID"}`).
     *   `500 Internal Server Error`: Database error reading or updating the collection configuration (e.g., `{"error": "Failed to set current deck"}`).
+
+### 12. Get Deck Statistics
+
+*   **Endpoint:** `GET /decks/<int:deck_id>/stats`
+*   **Description:** Retrieves the current count of cards in various review states (New, Learning, Relearning, Young, Mature, Suspended, Buried) for a specific deck.
+*   **Authentication Required:** Yes
+*   **Path Parameters:**
+    *   `deck_id` (integer): The ID of the deck for which to retrieve statistics.
+*   **Query Parameters:** None (The `timeframe` parameter is currently ignored by the backend).
+*   **Request Body:** None
+*   **Success Response:**
+    *   Code: `200 OK`
+    *   Body:
+        ```json
+        {
+          "counts": {
+            "New": integer,
+            "Learning": integer,
+            "Relearning": integer,
+            "Young": integer,
+            "Mature": integer,
+            "Suspended": integer,
+            "Buried": integer
+          },
+          "total": integer
+        }
+        ```
+        *(Where `total` represents the sum of all counts returned in the `counts` object).*
+*   **Error Responses:**
+    *   `401 Unauthorized`: (See Authentication section).
+    *   `404 Not Found`: The specified `deck_id` does not exist or does not belong to the user (e.g., `{"error": "Deck not found or access denied."}`).
+    *   `500 Internal Server Error`: Database error reading collection or card data (e.g., `{"error": "Collection data not found."}`, `{"error": "Database error occurred while fetching statistics."}`).

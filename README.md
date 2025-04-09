@@ -17,6 +17,7 @@ This project is a web-based flashcard application featuring:
     *   Rating buttons (Again, Hard, Good, Easy) to update card scheduling.
     *   Logout functionality.
     *   Export button to download the current deck as an `.apkg` file.
+    *   View deck statistics (current card counts by status: New, Learning, Young, Mature, etc.) with a pie chart visualization.
 *   **Backend (Python/Flask)**:
     *   REST API for frontend communication.
     *   User management (`admin.db`) with password hashing (bcrypt).

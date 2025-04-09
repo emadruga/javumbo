@@ -192,7 +192,7 @@ Navigate to the client directory and build the production assets:
 # Navigate to the client directory
 cd ../client # Assuming you are in the server directory
 
-# Install dependencies (if not done already, e.g., during development)
+# Install dependencies (including React, Router, Axios, Chart.js, etc.)
 npm install
 
 # Create the production build
