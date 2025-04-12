@@ -74,6 +74,12 @@ function ReviewPage({ user, onLogout }) {
     }
   };
 
+  const handleEditCard = () => {
+    if (card && card.card_id) {
+      navigate(`/edit/${card.card_id}`);
+    }
+  };
+
   return (
     <div className="container mt-4">
       <Header user={user} onLogout={onLogout} />
@@ -97,14 +103,26 @@ function ReviewPage({ user, onLogout }) {
           </div>
           <div className="card-footer">
             {showAnswer ? (
-              <div className="d-flex justify-content-around">
-                <button className="btn btn-danger" onClick={() => handleAnswer(1)}>Again (1)</button>
-                <button className="btn btn-warning" onClick={() => handleAnswer(2)}>Hard (2)</button>
-                <button className="btn btn-success" onClick={() => handleAnswer(3)}>Good (3)</button>
-                <button className="btn btn-primary" onClick={() => handleAnswer(4)}>Easy (4)</button>
-              </div>
+              <>
+                <div className="d-flex justify-content-around mb-2">
+                  <button className="btn btn-danger" onClick={() => handleAnswer(1)}>Again (1)</button>
+                  <button className="btn btn-warning" onClick={() => handleAnswer(2)}>Hard (2)</button>
+                  <button className="btn btn-success" onClick={() => handleAnswer(3)}>Good (3)</button>
+                  <button className="btn btn-primary" onClick={() => handleAnswer(4)}>Easy (4)</button>
+                </div>
+                <div className="text-center mt-2">
+                  <button className="btn btn-outline-secondary btn-sm" onClick={handleEditCard}>
+                    Edit Card
+                  </button>
+                </div>
+              </>
             ) : (
-              <button className="btn btn-secondary" onClick={() => setShowAnswer(true)}>Show Answer</button>
+              <div className="d-flex justify-content-between">
+                <button className="btn btn-secondary" onClick={() => setShowAnswer(true)}>Show Answer</button>
+                <button className="btn btn-outline-secondary btn-sm" onClick={handleEditCard}>
+                  Edit Card
+                </button>
+              </div>
             )}
           </div>
         </div>

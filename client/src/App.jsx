@@ -5,6 +5,7 @@ import ReviewPage from './components/ReviewPage.jsx'; // Uncomment
 import AddCardPage from './components/AddCardPage.jsx'; // Uncomment
 import DecksPage from './pages/DecksPage.jsx'; // Uncomment
 import DeckStatisticsPage from './components/DeckStatisticsPage.jsx'; // Import the new page
+import EditCardPage from './pages/EditCardPage.jsx'; // Import EditCardPage
 import api from './api/axiosConfig.js'; // Import configured Axios instance
 
 function App() {
@@ -71,6 +72,10 @@ function App() {
         <Route
            path="/decks/:deckId/stats"
            element={user ? <DeckStatisticsPage user={user} onLogout={handleLogout} /> : <AuthPage onLoginSuccess={handleLoginSuccess} />}
+        />
+        <Route
+           path="/edit/:cardId"
+           element={user ? <EditCardPage user={user} onLogout={handleLogout} /> : <AuthPage onLoginSuccess={handleLoginSuccess} />}
         />
       </Routes>
     </div>

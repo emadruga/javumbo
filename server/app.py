@@ -1225,6 +1225,225 @@ def get_deck_stats(deck_id):
         if conn:
             conn.close()
 
+@app.route('/cards/<card_id>', methods=['GET'])
+def get_card(card_id):
+    # Check if user is logged in
+    if 'user_id' not in session:
+        app.logger.warning("Unauthorized attempt to access card data")
+        return jsonify({"error": "Unauthorized access"}), 401
+    
+    user_id = session['user_id']
+    db_path = get_user_db_path(user_id)
+    
+    # Check if user's database exists
+    if not os.path.exists(db_path):
+        app.logger.error(f"Database not found for user {user_id}")
+        return jsonify({"error": "User database not found"}), 404
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Query to get the card details
+        cursor.execute("""
+            SELECT n.flds, c.id
+            FROM cards c
+            JOIN notes n ON c.nid = n.id
+            WHERE c.id = ?
+        """, (card_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            app.logger.warning(f"Card {card_id} not found")
+            return jsonify({"error": "Card not found"}), 404
+        
+        # Parse fields from the note
+        fields = result[0].split('\x1f')  # Anki separator for fields
+        if len(fields) < 2:
+            app.logger.error(f"Card {card_id} has invalid field format")
+            return jsonify({"error": "Invalid card format"}), 500
+        
+        # Return the card details
+        return jsonify({
+            "card_id": result[1],
+            "front": fields[0],
+            "back": fields[1]
+        })
+        
+    except Exception as e:
+        app.logger.exception(f"Error fetching card {card_id}: {str(e)}")
+        return jsonify({"error": f"Error fetching card: {str(e)}"}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/cards/<card_id>', methods=['PUT'])
+def update_card(card_id):
+    # Check if user is logged in
+    if 'user_id' not in session:
+        app.logger.warning("Unauthorized attempt to update card")
+        return jsonify({"error": "Unauthorized access"}), 401
+    
+    # Get request data
+    data = request.json
+    if not data or 'front' not in data or 'back' not in data:
+        app.logger.warning("Invalid request data for card update")
+        return jsonify({"error": "Front and back fields are required"}), 400
+    
+    front = data['front'].strip()
+    back = data['back'].strip()
+    
+    if not front or not back:
+        app.logger.warning("Empty front or back field in card update request")
+        return jsonify({"error": "Front and back fields cannot be empty"}), 400
+    
+    user_id = session['user_id']
+    db_path = get_user_db_path(user_id)
+    
+    # Check if user's database exists
+    if not os.path.exists(db_path):
+        app.logger.error(f"Database not found for user {user_id}")
+        return jsonify({"error": "User database not found"}), 404
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # First, get the note ID for this card
+        cursor.execute("SELECT nid FROM cards WHERE id = ?", (card_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            app.logger.warning(f"Card {card_id} not found")
+            return jsonify({"error": "Card not found"}), 404
+        
+        note_id = result[0]
+        
+        # Update the note fields
+        new_fields = f"{front}\x1f{back}"
+        checksum = sha1_checksum(front)  # Calculate checksum on first field
+        current_time = int(time.time())
+        
+        cursor.execute("""
+            UPDATE notes 
+            SET flds = ?, csum = ?, mod = ?, sfld = ?
+            WHERE id = ?
+        """, (new_fields, int(checksum, 16) & 0xFFFFFFFF, current_time, front, note_id))
+        
+        # Update the card's modification time
+        cursor.execute("""
+            UPDATE cards
+            SET mod = ?
+            WHERE id = ?
+        """, (current_time, card_id))
+        
+        # Update collection modification time
+        cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
+        
+        conn.commit()
+        app.logger.info(f"Successfully updated card {card_id}")
+        return jsonify({"success": True, "message": "Card updated successfully"})
+        
+    except Exception as e:
+        app.logger.exception(f"Error updating card {card_id}: {str(e)}")
+        return jsonify({"error": f"Error updating card: {str(e)}"}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/decks/<deck_id>/cards', methods=['GET'])
+def get_deck_cards(deck_id):
+    # Check if user is logged in
+    if 'user_id' not in session:
+        app.logger.warning("Unauthorized attempt to access deck cards")
+        return jsonify({"error": "Unauthorized access"}), 401
+    
+    user_id = session['user_id']
+    db_path = get_user_db_path(user_id)
+    
+    # Check if user's database exists
+    if not os.path.exists(db_path):
+        app.logger.error(f"Database not found for user {user_id}")
+        return jsonify({"error": "User database not found"}), 404
+    
+    # Get pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    
+    # Calculate offset for pagination
+    offset = (page - 1) * per_page
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # First, check if the deck exists by querying the col table's decks JSON field
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        if not col_data or not col_data['decks']:
+            app.logger.warning("Collection data not found or invalid")
+            return jsonify({"error": "Collection data not found"}), 500
+            
+        decks_dict = json.loads(col_data['decks'])
+        if str(deck_id) not in decks_dict:
+            app.logger.warning(f"Deck {deck_id} not found")
+            return jsonify({"error": "Deck not found"}), 404
+            
+        deck_name = decks_dict[str(deck_id)]['name']
+        
+        # Get total number of cards in the deck
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM cards c
+            WHERE c.did = ?
+        """, (deck_id,))
+        total_cards = cursor.fetchone()[0]
+        
+        # Query to get cards for the deck with pagination
+        cursor.execute("""
+            SELECT c.id, n.id AS note_id, n.flds, c.mod
+            FROM cards c
+            JOIN notes n ON c.nid = n.id
+            WHERE c.did = ?
+            ORDER BY c.id DESC
+            LIMIT ? OFFSET ?
+        """, (deck_id, per_page, offset))
+        
+        cards_data = []
+        for row in cursor.fetchall():
+            card_id, note_id, fields, mod_time = row
+            # Parse fields from the note (separated by the Anki separator \x1f)
+            field_list = fields.split('\x1f')
+            if len(field_list) >= 2:
+                cards_data.append({
+                    "card_id": card_id,
+                    "note_id": note_id,
+                    "front": field_list[0],
+                    "back": field_list[1],
+                    "modified": mod_time  # This is epoch timestamp
+                })
+        
+        # Return the cards with pagination metadata
+        return jsonify({
+            "deck_id": deck_id,
+            "deck_name": deck_name,
+            "cards": cards_data,
+            "pagination": {
+                "total": total_cards,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": (total_cards + per_page - 1) // per_page
+            }
+        })
+        
+    except Exception as e:
+        app.logger.exception(f"Error fetching cards for deck {deck_id}: {str(e)}")
+        return jsonify({"error": f"Error fetching cards: {str(e)}"}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
 # --- Server Start ---
 if __name__ == '__main__':
     # Initialize databases if they don't exist

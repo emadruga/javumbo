@@ -32,10 +32,27 @@ export const addCard = async ({ front, back }) => {
 };
 
 // Get statistics for a specific deck
-export const getDeckStats = async (deckId, timeframe = 'today') => {
-  // Note: Backend currently ignores timeframe parameter
-  const response = await axiosInstance.get(`/decks/${deckId}/stats`, {
-    // params: { timeframe } // Send timeframe if backend uses it
-  });
+export const getDeckStats = async (deckId) => {
+  const response = await axiosInstance.get(`/decks/${deckId}/stats`);
   return response.data; // Expected: { counts: {...}, total: number }
+};
+
+// Get a specific card by ID
+export const getCard = async (cardId) => {
+  const response = await axiosInstance.get(`/cards/${cardId}`);
+  return response.data;
+};
+
+// Update a card
+export const updateCard = async (cardId, { front, back }) => {
+  const response = await axiosInstance.put(`/cards/${cardId}`, { front, back });
+  return response.data;
+};
+
+// Get all cards for a specific deck with pagination
+export const getDeckCards = async (deckId, page = 1, perPage = 10) => {
+  const response = await axiosInstance.get(`/decks/${deckId}/cards`, {
+    params: { page, per_page: perPage }
+  });
+  return response.data;
 }; 
