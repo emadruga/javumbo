@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header'; // Use shared header
 import api from '../api/axiosConfig';
 import fileDownload from 'js-file-download'; // Import for export
-import { getDeckCards } from '../api'; // Import the new API function
+import { getDeckCards, deleteCard } from '../api'; // Import API functions
 
 // Basic styling (consider moving to CSS)
 const pageStyle = {
@@ -42,7 +42,6 @@ const buttonStyle = {
     fontSize: '1em'
 };
 
-const reviewButtonStyle = {...buttonStyle, backgroundColor: '#28a745', color: 'white'};
 const exportButtonStyle = {...buttonStyle, backgroundColor: '#6c757d', color: 'white'}; // Add style for export button
 const createFormStyle = {
     display: 'flex',
@@ -67,24 +66,29 @@ const errorStyle = { ...messageStyle, color: 'red' };
 // New styles for the card list view
 const navbarStyle = {
   display: 'flex',
-  gap: '20px',
+  gap: '15px',
   marginBottom: '20px',
-  padding: '0 0 10px 0',
-  borderBottom: '1px solid #ddd'
+  padding: '10px 0',
+  borderBottom: '1px solid #e0e0e0'
 };
 
 const navItemStyle = {
-  padding: '8px 15px',
+  padding: '6px 15px',
   cursor: 'pointer',
   borderRadius: '4px',
-  fontSize: '1em',
-  backgroundColor: '#f0f0f0'
+  fontSize: '0.95em',
+  backgroundColor: '#f8f9fa',
+  border: '1px solid #ddd',
+  fontWeight: 'normal'
 };
 
 const activeNavItemStyle = {
   ...navItemStyle,
-  backgroundColor: '#007bff',
-  color: 'white'
+  backgroundColor: '#e9f2ff',
+  borderColor: '#b8daff',
+  color: '#007bff',
+  fontWeight: 'bold',
+  borderBottom: '2px solid #007bff'
 };
 
 const cardListStyle = {
@@ -127,6 +131,76 @@ const paginationButtonStyle = {
   padding: '5px 10px'
 };
 
+// New styles for confirmation modal
+const modalOverlayStyle = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 1000
+};
+
+const modalContentStyle = {
+  backgroundColor: 'white',
+  padding: '20px',
+  borderRadius: '5px',
+  maxWidth: '500px',
+  width: '90%',
+  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)'
+};
+
+const modalButtonsStyle = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: '10px',
+  marginTop: '20px'
+};
+
+const deleteButtonStyle = {
+  ...buttonStyle,
+  backgroundColor: '#dc3545',
+  color: 'white'
+};
+
+// Add new styles for the dropdown menu
+const dropdownButtonStyle = {
+  ...buttonStyle,
+  backgroundColor: '#6c757d',
+  color: 'white',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '5px',
+  padding: '8px 10px'
+};
+
+const dropdownMenuStyle = {
+  position: 'absolute',
+  backgroundColor: 'white',
+  border: '1px solid #ddd',
+  borderRadius: '4px',
+  boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
+  zIndex: 10,
+  marginTop: '2px',
+  right: '0',
+  minWidth: '120px'
+};
+
+const dropdownItemStyle = {
+  padding: '8px 15px',
+  cursor: 'pointer',
+  display: 'block',
+  width: '100%',
+  textAlign: 'left',
+  border: 'none',
+  backgroundColor: 'transparent',
+  borderBottom: '1px solid #eee'
+};
+
 function DecksPage({ user, onLogout }) {
   const [decks, setDecks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -149,6 +223,70 @@ function DecksPage({ user, onLogout }) {
     per_page: 10,
     total_pages: 0
   });
+
+  // New state for the delete confirmation modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [cardToDelete, setCardToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // New state for deck deletion
+  const [showDeckDeleteModal, setShowDeckDeleteModal] = useState(false);
+  const [deckToDelete, setDeckToDelete] = useState(null);
+  const [isDeckDeleting, setIsDeckDeleting] = useState(false);
+
+  // New state for deck renaming
+  const [showDeckRenameModal, setShowDeckRenameModal] = useState(false);
+  const [deckToRename, setDeckToRename] = useState(null);
+  const [newDeckRename, setNewDeckRename] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+
+  // Add state for dropdown
+  const [openDropdownId, setOpenDropdownId] = useState(null);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setOpenDropdownId(null);
+    };
+    
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, []);
+  
+  // Function to toggle dropdown menu
+  const toggleDropdown = (e, deckId) => {
+    e.stopPropagation(); // Prevent event from bubbling up
+    setOpenDropdownId(openDropdownId === deckId ? null : deckId);
+  };
+  
+  // Function to handle dropdown menu item clicks
+  const handleDropdownAction = (e, action, deckId, deckName) => {
+    e.stopPropagation(); // Prevent event from bubbling up
+    setOpenDropdownId(null);
+    
+    switch(action) {
+      case 'review':
+        handleSelectDeck(deckId);
+        break;
+      case 'stats':
+        localStorage.setItem('currentDeckName', deckName || 'Unknown Deck');
+        navigate(`/decks/${deckId}/stats`);
+        break;
+      case 'browse':
+        handleViewCards(deckId);
+        break;
+      case 'rename':
+        handleDeckRenameClick(deckId, deckName);
+        break;
+      case 'delete':
+        handleDeckDeleteClick(deckId, deckName);
+        break;
+      default:
+        break;
+    }
+  };
 
   const fetchDecks = useCallback(async () => {
     setIsLoading(true);
@@ -324,27 +462,172 @@ function DecksPage({ user, onLogout }) {
     fetchCards(selectedDeck?.id, page);
   };
 
+  // Handler to open delete confirmation modal
+  const handleDeleteClick = (card) => {
+    setCardToDelete(card);
+    setShowDeleteModal(true);
+  };
+
+  // Handler to cancel delete
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setCardToDelete(null);
+  };
+
+  // Handler to confirm delete
+  const handleConfirmDelete = async () => {
+    if (!cardToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteCard(cardToDelete.card_id);
+      // Remove card from state
+      setCards(cards.filter(card => card.card_id !== cardToDelete.card_id));
+      // Update pagination
+      setPagination(prev => ({
+        ...prev,
+        total: prev.total - 1,
+        total_pages: Math.max(1, Math.ceil((prev.total - 1) / prev.per_page))
+      }));
+      // Close modal
+      setShowDeleteModal(false);
+      setCardToDelete(null);
+      // Fetch cards again if we've deleted the last card on the page
+      if (cards.length === 1 && currentPage > 1) {
+        fetchCards(selectedDeck?.id, currentPage - 1);
+        setCurrentPage(currentPage - 1);
+      }
+    } catch (err) {
+      console.error("Error deleting card:", err);
+      if (err.response?.status === 401) {
+        onLogout();
+      } else {
+        setCardsError("Failed to delete card. Please try again.");
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handler to open deck delete confirmation modal
+  const handleDeckDeleteClick = (deckId, deckName) => {
+    setDeckToDelete({ id: deckId, name: deckName });
+    setShowDeckDeleteModal(true);
+  };
+
+  // Handler to cancel deck delete
+  const handleCancelDeckDelete = () => {
+    setShowDeckDeleteModal(false);
+    setDeckToDelete(null);
+  };
+
+  // Handler to confirm deck delete
+  const handleConfirmDeckDelete = async () => {
+    if (!deckToDelete) return;
+    
+    setIsDeckDeleting(true);
+    try {
+      await api.delete(`/decks/${deckToDelete.id}`);
+      // Remove deck from state
+      setDecks(decks.filter(deck => deck.id !== deckToDelete.id));
+      // Close modal
+      setShowDeckDeleteModal(false);
+      setDeckToDelete(null);
+      
+      // If the deleted deck was the selected deck, reset the selection
+      if (selectedDeck && selectedDeck.id === deckToDelete.id) {
+        setSelectedDeck(null);
+        setActiveView('decks');
+      }
+    } catch (err) {
+      console.error("Error deleting deck:", err);
+      if (err.response?.status === 401) {
+        onLogout();
+      } else {
+        setError("Failed to delete deck. Please try again.");
+      }
+    } finally {
+      setIsDeckDeleting(false);
+    }
+  };
+
+  // Handler to open deck rename modal
+  const handleDeckRenameClick = (deckId, deckName) => {
+    setDeckToRename({ id: deckId, name: deckName });
+    setNewDeckRename(deckName);
+    setShowDeckRenameModal(true);
+  };
+
+  // Handler to cancel deck rename
+  const handleCancelDeckRename = () => {
+    setShowDeckRenameModal(false);
+    setDeckToRename(null);
+    setNewDeckRename('');
+  };
+
+  // Handler to confirm deck rename
+  const handleConfirmDeckRename = async () => {
+    if (!deckToRename || !newDeckRename.trim()) return;
+    
+    setIsRenaming(true);
+    try {
+      await api.put(`/decks/${deckToRename.id}/rename`, { name: newDeckRename.trim() });
+      
+      // Update the deck name in the local state
+      setDecks(decks.map(deck => 
+        deck.id === deckToRename.id 
+          ? { ...deck, name: newDeckRename.trim() } 
+          : deck
+      ));
+      
+      // If this was the selected deck, update that reference too
+      if (selectedDeck && selectedDeck.id === deckToRename.id) {
+        setSelectedDeck({ ...selectedDeck, name: newDeckRename.trim() });
+        localStorage.setItem('currentDeckName', newDeckRename.trim());
+      }
+      
+      // Close modal
+      setShowDeckRenameModal(false);
+      setDeckToRename(null);
+      setNewDeckRename('');
+      
+    } catch (err) {
+      console.error("Error renaming deck:", err);
+      if (err.response?.status === 401) {
+        onLogout();
+      } else if (err.response?.data?.error) {
+        setError(err.response.data.error);
+      } else {
+        setError("Failed to rename deck. Please try again.");
+      }
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
   return (
     <div style={pageStyle}>
       {/* Pass null for onExport in Header */}
       <Header user={user} onLogout={onLogout} />
 
       {/* Navigation tabs */}
-      <div style={navbarStyle}>
-        <button 
-          style={activeView === 'decks' ? activeNavItemStyle : navItemStyle}
-          onClick={() => setActiveView('decks')}
-        >
-          Decks
-        </button>
-        {selectedDeck && (
+      <div>
+        <div style={navbarStyle}>
           <button 
-            style={activeView === 'cards' ? activeNavItemStyle : navItemStyle}
-            onClick={() => handleViewCards(selectedDeck.id)}
+            style={activeView === 'decks' ? activeNavItemStyle : navItemStyle}
+            onClick={() => setActiveView('decks')}
           >
-            Cards in {selectedDeck.name}
+            Decks
           </button>
-        )}
+          {selectedDeck && (
+            <button 
+              style={activeView === 'cards' ? activeNavItemStyle : navItemStyle}
+              onClick={() => handleViewCards(selectedDeck.id)}
+            >
+              Cards in {selectedDeck.name}
+            </button>
+          )}
+        </div>
       </div>
 
       {activeView === 'decks' ? (
@@ -367,32 +650,49 @@ function DecksPage({ user, onLogout }) {
               {decks.map((deck) => (
                 <li key={deck.id} style={deckItemStyle}>
                   <span style={deckNameStyle}>{deck.name}</span>
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ position: 'relative' }}>
                     <button
-                      onClick={() => handleSelectDeck(deck.id)}
-                      style={reviewButtonStyle}
-                      className="btn btn-success btn-sm"
+                      onClick={(e) => toggleDropdown(e, deck.id)}
+                      style={dropdownButtonStyle}
                     >
-                      Review
+                      &#9881;
+                      <span style={{ marginLeft: '2px' }}>▼</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        const deckName = deck.name || 'Unknown Deck';
-                        localStorage.setItem('currentDeckName', deckName);
-                        navigate(`/decks/${deck.id}/stats`);
-                      }}
-                      style={{...buttonStyle, backgroundColor: '#17a2b8'}}
-                      className="btn btn-info btn-sm"
-                    >
-                      Stats
-                    </button>
-                    <button
-                      onClick={() => handleViewCards(deck.id)}
-                      style={{...buttonStyle, backgroundColor: '#6c757d'}}
-                      className="btn btn-secondary btn-sm"
-                    >
-                      Browse
-                    </button>
+                    
+                    {openDropdownId === deck.id && (
+                      <div style={dropdownMenuStyle}>
+                        <button 
+                          style={{...dropdownItemStyle, color: '#28a745'}}
+                          onClick={(e) => handleDropdownAction(e, 'review', deck.id, deck.name)}
+                        >
+                          Review
+                        </button>
+                        <button 
+                          style={{...dropdownItemStyle, color: '#17a2b8'}}
+                          onClick={(e) => handleDropdownAction(e, 'stats', deck.id, deck.name)}
+                        >
+                          Stats
+                        </button>
+                        <button 
+                          style={{...dropdownItemStyle, color: '#6c757d'}}
+                          onClick={(e) => handleDropdownAction(e, 'browse', deck.id, deck.name)}
+                        >
+                          Browse
+                        </button>
+                        <button 
+                          style={{...dropdownItemStyle, color: '#ffc107'}}
+                          onClick={(e) => handleDropdownAction(e, 'rename', deck.id, deck.name)}
+                        >
+                          Rename
+                        </button>
+                        <button 
+                          style={{...dropdownItemStyle, color: '#dc3545'}}
+                          onClick={(e) => handleDropdownAction(e, 'delete', deck.id, deck.name)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </li>
               ))}
@@ -447,12 +747,18 @@ function DecksPage({ user, onLogout }) {
                           <h5>Back</h5>
                           <p>{card.back}</p>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                           <button 
                             onClick={() => handleEditCard(card.card_id)}
                             style={{...buttonStyle, backgroundColor: '#007bff', color: 'white'}}
                           >
                             Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteClick(card)}
+                            style={deleteButtonStyle}
+                          >
+                            Delete
                           </button>
                         </div>
                       </div>
@@ -503,6 +809,111 @@ function DecksPage({ user, onLogout }) {
             </>
           )}
         </>
+      )}
+
+      {/* Delete Card Confirmation Modal */}
+      {showDeleteModal && (
+        <div style={modalOverlayStyle}>
+          <div style={modalContentStyle}>
+            <h3>Delete Card</h3>
+            <p>Are you sure you want to delete this card?</p>
+            {cardToDelete && (
+              <div style={{ backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '4px', margin: '10px 0' }}>
+                <strong>Front:</strong> {cardToDelete.front.length > 50 
+                  ? cardToDelete.front.substring(0, 50) + '...' 
+                  : cardToDelete.front}
+              </div>
+            )}
+            <div style={modalButtonsStyle}>
+              <button 
+                onClick={handleCancelDelete}
+                style={buttonStyle}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                style={deleteButtonStyle}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Deck Confirmation Modal */}
+      {showDeckDeleteModal && (
+        <div style={modalOverlayStyle}>
+          <div style={modalContentStyle}>
+            <h3>Delete Deck</h3>
+            <p>Are you sure you want to delete this deck? This will delete all cards in the deck and cannot be undone.</p>
+            {deckToDelete && (
+              <div style={{ backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '4px', margin: '10px 0' }}>
+                <strong>Deck:</strong> {deckToDelete.name}
+              </div>
+            )}
+            <div style={modalButtonsStyle}>
+              <button 
+                onClick={handleCancelDeckDelete}
+                style={buttonStyle}
+                disabled={isDeckDeleting}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmDeckDelete}
+                style={deleteButtonStyle}
+                disabled={isDeckDeleting}
+              >
+                {isDeckDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Deck Modal */}
+      {showDeckRenameModal && (
+        <div style={modalOverlayStyle}>
+          <div style={modalContentStyle}>
+            <h3>Rename Deck</h3>
+            <p>Enter a new name for this deck:</p>
+            {deckToRename && (
+              <div style={{ marginBottom: '15px' }}>
+                <strong>Current name:</strong> {deckToRename.name}
+              </div>
+            )}
+            <div style={{ marginBottom: '20px' }}>
+              <input
+                type="text"
+                value={newDeckRename}
+                onChange={(e) => setNewDeckRename(e.target.value)}
+                placeholder="Enter new deck name"
+                style={{...inputStyle, width: '100%'}}
+                required
+              />
+            </div>
+            <div style={modalButtonsStyle}>
+              <button 
+                onClick={handleCancelDeckRename}
+                style={buttonStyle}
+                disabled={isRenaming}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmDeckRename}
+                style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black'}}
+                disabled={isRenaming || !newDeckRename.trim()}
+              >
+                {isRenaming ? 'Renaming...' : 'Rename'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -55,4 +55,10 @@ export const getDeckCards = async (deckId, page = 1, perPage = 10) => {
     params: { page, per_page: perPage }
   });
   return response.data;
+};
+
+// Delete a card
+export const deleteCard = async (cardId) => {
+  const response = await axiosInstance.delete(`/cards/${cardId}`);
+  return response.data;
 }; 

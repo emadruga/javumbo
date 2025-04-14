@@ -1444,6 +1444,232 @@ def get_deck_cards(deck_id):
         if 'conn' in locals():
             conn.close()
 
+@app.route('/cards/<card_id>', methods=['DELETE'])
+def delete_card(card_id):
+    # Check if user is logged in
+    if 'user_id' not in session:
+        app.logger.warning("Unauthorized attempt to delete card")
+        return jsonify({"error": "Unauthorized access"}), 401
+    
+    user_id = session['user_id']
+    db_path = get_user_db_path(user_id)
+    
+    # Check if user's database exists
+    if not os.path.exists(db_path):
+        app.logger.error(f"Database not found for user {user_id}")
+        return jsonify({"error": "User database not found"}), 404
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # First, get the note ID for this card
+        cursor.execute("SELECT nid FROM cards WHERE id = ?", (card_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            app.logger.warning(f"Card {card_id} not found")
+            return jsonify({"error": "Card not found"}), 404
+        
+        note_id = result[0]
+        
+        # Begin transaction
+        conn.execute("BEGIN")
+        
+        # Delete the card
+        cursor.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+        
+        # Check if there are any other cards associated with this note
+        cursor.execute("SELECT COUNT(*) FROM cards WHERE nid = ?", (note_id,))
+        other_cards_count = cursor.fetchone()[0]
+        
+        # If no other cards use this note, delete the note too
+        if other_cards_count == 0:
+            cursor.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+        
+        # Update collection modification time
+        cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
+        
+        # Commit the transaction
+        conn.commit()
+        
+        app.logger.info(f"Successfully deleted card {card_id}")
+        return jsonify({"success": True, "message": "Card deleted successfully"})
+        
+    except Exception as e:
+        app.logger.exception(f"Error deleting card {card_id}: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
+        return jsonify({"error": f"Error deleting card: {str(e)}"}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.route('/decks/<int:deck_id>', methods=['DELETE'])
+def delete_deck(deck_id):
+    """Delete a specific deck and all its cards"""
+    # Check if user is logged in
+    if 'user_id' not in session:
+        app.logger.warning("Unauthorized attempt to delete deck")
+        return jsonify({"error": "You must be logged in"}), 401
+    
+    user_id = session['user_id']
+    user_db_path = get_user_db_path(user_id)
+    
+    # Check if user DB exists
+    if not os.path.exists(user_db_path):
+        app.logger.error(f"User database not found for user {user_id}")
+        return jsonify({"error": "User database not found"}), 500
+    
+    try:
+        conn = sqlite3.connect(user_db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # First check if the deck exists in the col table's decks JSON
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        
+        if not col_data or not col_data['decks']:
+            conn.close()
+            app.logger.warning(f"Collection data not found or invalid")
+            return jsonify({"error": "Collection data not found"}), 500
+            
+        decks_dict = json.loads(col_data['decks'])
+        deck_id_str = str(deck_id)
+        
+        if deck_id_str not in decks_dict:
+            conn.close()
+            app.logger.warning(f"Attempt to delete non-existent deck {deck_id}")
+            return jsonify({"error": "Deck not found"}), 404
+        
+        deck_name = decks_dict[deck_id_str]['name']
+        app.logger.info(f"Deleting deck '{deck_name}' (ID: {deck_id}) for user {user_id}")
+        
+        # Start a transaction
+        cursor.execute("BEGIN TRANSACTION")
+        
+        # Delete all cards in the deck
+        cursor.execute("DELETE FROM cards WHERE did = ?", (deck_id,))
+        cards_deleted = cursor.rowcount
+        app.logger.info(f"Deleted {cards_deleted} cards from deck {deck_id}")
+        
+        # Remove the deck from the decks dictionary
+        del decks_dict[deck_id_str]
+        
+        # Update the col table with the modified decks JSON
+        current_time_ms = int(time.time() * 1000)
+        cursor.execute("UPDATE col SET decks = ?, mod = ?", 
+                      (json.dumps(decks_dict), current_time_ms))
+        
+        # Commit the transaction
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"message": f"Deck '{deck_name}' and {cards_deleted} cards deleted successfully"}), 200
+        
+    except sqlite3.Error as e:
+        # Rollback in case of error
+        if conn:
+            conn.rollback()
+            conn.close()
+        app.logger.error(f"Database error while deleting deck {deck_id}: {str(e)}")
+        return jsonify({"error": "Failed to delete deck due to database error"}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        app.logger.exception(f"Error deleting deck {deck_id}: {str(e)}")
+        return jsonify({"error": "Failed to delete deck"}), 500
+
+@app.route('/decks/<int:deck_id>/rename', methods=['PUT'])
+def rename_deck(deck_id):
+    """Renames a specific deck"""
+    # Check if user is logged in
+    if 'user_id' not in session:
+        app.logger.warning("Unauthorized attempt to rename deck")
+        return jsonify({"error": "You must be logged in"}), 401
+    
+    user_id = session['user_id']
+    user_db_path = get_user_db_path(user_id)
+    
+    # Get the new name from request JSON
+    data = request.get_json()
+    new_name = data.get('name')
+    
+    if not new_name or not new_name.strip():
+        return jsonify({"error": "New deck name cannot be empty"}), 400
+    
+    new_name = new_name.strip()
+    
+    # Check if user DB exists
+    if not os.path.exists(user_db_path):
+        app.logger.error(f"User database not found for user {user_id}")
+        return jsonify({"error": "User database not found"}), 500
+    
+    try:
+        conn = sqlite3.connect(user_db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # First check if the deck exists in the col table's decks JSON
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        
+        if not col_data or not col_data['decks']:
+            conn.close()
+            app.logger.warning(f"Collection data not found or invalid")
+            return jsonify({"error": "Collection data not found"}), 500
+            
+        decks_dict = json.loads(col_data['decks'])
+        deck_id_str = str(deck_id)
+        
+        if deck_id_str not in decks_dict:
+            conn.close()
+            app.logger.warning(f"Attempt to rename non-existent deck {deck_id}")
+            return jsonify({"error": "Deck not found"}), 404
+        
+        # Check if another deck already has this name (case insensitive)
+        for d_id, deck in decks_dict.items():
+            if d_id != deck_id_str and deck['name'].lower() == new_name.lower():
+                conn.close()
+                return jsonify({"error": "A deck with this name already exists"}), 409
+        
+        old_name = decks_dict[deck_id_str]['name']
+        app.logger.info(f"Renaming deck from '{old_name}' to '{new_name}' (ID: {deck_id}) for user {user_id}")
+        
+        # Update the deck name in the dictionary
+        decks_dict[deck_id_str]['name'] = new_name
+        decks_dict[deck_id_str]['mod'] = int(time.time())  # Update modification time
+        
+        # Update the col table with the modified decks JSON
+        current_time_ms = int(time.time() * 1000)
+        cursor.execute("UPDATE col SET decks = ?, mod = ?", 
+                      (json.dumps(decks_dict), current_time_ms))
+        
+        # Commit the changes
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "message": f"Deck renamed from '{old_name}' to '{new_name}' successfully",
+            "id": deck_id,
+            "name": new_name
+        }), 200
+        
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        app.logger.error(f"Database error while renaming deck {deck_id}: {str(e)}")
+        return jsonify({"error": "Failed to rename deck due to database error"}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        app.logger.exception(f"Error renaming deck {deck_id}: {str(e)}")
+        return jsonify({"error": "Failed to rename deck"}), 500
+
 # --- Server Start ---
 if __name__ == '__main__':
     # Initialize databases if they don't exist

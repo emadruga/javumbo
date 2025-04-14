@@ -413,6 +413,270 @@ class TestFlaskApi(unittest.TestCase):
         response = self.client.get('/export')
         self.assertEqual(response.status_code, 401)
 
+    # GET /cards/<card_id>
+    def test_32_get_card_details_success(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            # Add a card
+            add_resp = self._add_card(c, "Get Card Test", "This is the card content")
+            self.assertEqual(add_resp.status_code, 201)
+            card_id = json.loads(add_resp.data)["card_id"]
+
+            # Get the card details
+            response = c.get(f'/cards/{card_id}')
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(data["card_id"], card_id)
+            self.assertEqual(data["front"], "Get Card Test")
+            self.assertEqual(data["back"], "This is the card content")
+
+    def test_32a_get_card_details_not_found(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            response = c.get('/cards/99999')  # Non-existent card
+            self.assertEqual(response.status_code, 404)
+            
+    def test_32b_get_card_details_unauthorized(self):
+        response = self.client.get('/cards/1')  # Not logged in
+        self.assertEqual(response.status_code, 401)
+
+    # PUT /cards/<card_id>
+    def test_33_update_card_success(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            # Add a card
+            add_resp = self._add_card(c, "Update Card Test", "Original content")
+            self.assertEqual(add_resp.status_code, 201)
+            card_id = json.loads(add_resp.data)["card_id"]
+
+            # Update the card
+            response = c.put(f'/cards/{card_id}', json={
+                "front": "Updated Front",
+                "back": "Updated Back"
+            })
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertTrue(data["success"])
+            self.assertIn("Card updated successfully", data["message"])
+
+            # Verify the update
+            get_resp = c.get(f'/cards/{card_id}')
+            get_data = json.loads(get_resp.data)
+            self.assertEqual(get_data["front"], "Updated Front")
+            self.assertEqual(get_data["back"], "Updated Back")
+
+    def test_33a_update_card_invalid_data(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            # Add a card
+            add_resp = self._add_card(c, "Update Card Invalid", "Original content")
+            self.assertEqual(add_resp.status_code, 201)
+            card_id = json.loads(add_resp.data)["card_id"]
+
+            # Update with empty content
+            response = c.put(f'/cards/{card_id}', json={
+                "front": "",
+                "back": "Updated Back"
+            })
+            self.assertEqual(response.status_code, 400)
+
+    def test_33b_update_card_not_found(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            response = c.put('/cards/99999', json={
+                "front": "Updated Front",
+                "back": "Updated Back"
+            })
+            self.assertEqual(response.status_code, 404)
+
+    # GET /decks/<deck_id>/cards
+    def test_34_get_deck_cards_success(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            
+            # Add some cards to the default deck (ID 1)
+            self._add_card(c, "Deck Cards 1", "Content 1")
+            self._add_card(c, "Deck Cards 2", "Content 2")
+            
+            # Get cards from the deck
+            response = c.get('/decks/1/cards')
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            
+            self.assertIn("deck_id", data)
+            self.assertIn("deck_name", data)
+            self.assertIn("cards", data)
+            self.assertIn("pagination", data)
+            
+            self.assertIsInstance(data["cards"], list)
+            self.assertGreaterEqual(len(data["cards"]), 2)  # At least the two cards we added
+            
+            # Check that pagination info is present
+            self.assertIn("total", data["pagination"])
+            self.assertIn("page", data["pagination"])
+            self.assertIn("per_page", data["pagination"])
+            self.assertIn("total_pages", data["pagination"])
+            
+            # Check card structure
+            if len(data["cards"]) > 0:
+                first_card = data["cards"][0]
+                self.assertIn("card_id", first_card)
+                self.assertIn("front", first_card)
+                self.assertIn("back", first_card)
+    
+    def test_34a_get_deck_cards_pagination(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            
+            # Check that pagination parameters work
+            response = c.get('/decks/1/cards?page=1&per_page=1')
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(data["pagination"]["per_page"], 1)
+            self.assertEqual(len(data["cards"]), 1)  # Only one card per page
+    
+    def test_34b_get_deck_cards_not_found(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            response = c.get('/decks/99999/cards')  # Non-existent deck
+            self.assertEqual(response.status_code, 404)
+    
+    def test_34c_get_deck_cards_unauthorized(self):
+        response = self.client.get('/decks/1/cards')  # Not logged in
+        self.assertEqual(response.status_code, 401)
+
+    # DELETE /cards/<card_id>
+    def test_35_delete_card_success(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            
+            # Add a card
+            add_resp = self._add_card(c, "Delete Card Test", "Content to delete")
+            self.assertEqual(add_resp.status_code, 201)
+            card_id = json.loads(add_resp.data)["card_id"]
+            
+            # Delete the card
+            response = c.delete(f'/cards/{card_id}')
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertTrue(data["success"])
+            self.assertIn("Card deleted successfully", data["message"])
+            
+            # Verify the card is gone
+            get_resp = c.get(f'/cards/{card_id}')
+            self.assertEqual(get_resp.status_code, 404)
+    
+    def test_35a_delete_card_not_found(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            response = c.delete('/cards/99999')  # Non-existent card
+            self.assertEqual(response.status_code, 404)
+    
+    def test_35b_delete_card_unauthorized(self):
+        response = self.client.delete('/cards/1')  # Not logged in
+        self.assertEqual(response.status_code, 401)
+
+    # DELETE /decks/<deck_id>
+    def test_36_delete_deck_success(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            
+            # Create a new deck
+            create_resp = self._create_deck(c, "Deck to Delete")
+            self.assertEqual(create_resp.status_code, 201)
+            deck_id = json.loads(create_resp.data)["id"]
+            
+            # Add a card to the deck (needs to set current deck first)
+            c.put('/decks/current', json={'deckId': deck_id})
+            self._add_card(c, "Card in deleted deck", "Will be deleted")
+            
+            # Delete the deck
+            response = c.delete(f'/decks/{deck_id}')
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertIn("message", data)
+            self.assertIn("deleted successfully", data["message"])
+            
+            # Verify the deck is gone
+            decks_resp = c.get('/decks')
+            decks = json.loads(decks_resp.data)
+            self.assertFalse(any(d["id"] == deck_id for d in decks))
+    
+    def test_36a_delete_deck_not_found(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            response = c.delete('/decks/99999')  # Non-existent deck
+            self.assertEqual(response.status_code, 404)
+    
+    def test_36b_delete_deck_unauthorized(self):
+        response = self.client.delete('/decks/1')  # Not logged in
+        self.assertEqual(response.status_code, 401)
+
+    # PUT /decks/<deck_id>/rename
+    def test_37_rename_deck_success(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            
+            # Create a new deck
+            create_resp = self._create_deck(c, "Deck to Rename")
+            self.assertEqual(create_resp.status_code, 201)
+            deck_id = json.loads(create_resp.data)["id"]
+            
+            # Rename the deck
+            response = c.put(f'/decks/{deck_id}/rename', json={"name": "Renamed Deck"})
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertIn("message", data)
+            self.assertEqual(data["name"], "Renamed Deck")
+            self.assertEqual(data["id"], deck_id)
+            
+            # Verify the deck was renamed
+            decks_resp = c.get('/decks')
+            decks = json.loads(decks_resp.data)
+            renamed_deck = next((d for d in decks if d["id"] == deck_id), None)
+            self.assertIsNotNone(renamed_deck)
+            self.assertEqual(renamed_deck["name"], "Renamed Deck")
+    
+    def test_37a_rename_deck_duplicate_name(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            
+            # Create two decks
+            create_resp1 = self._create_deck(c, "Original Deck")
+            self.assertEqual(create_resp1.status_code, 201)
+            deck_id1 = json.loads(create_resp1.data)["id"]
+            
+            create_resp2 = self._create_deck(c, "Another Deck")
+            self.assertEqual(create_resp2.status_code, 201)
+            deck_id2 = json.loads(create_resp2.data)["id"]
+            
+            # Try to rename the second deck to the same name as the first
+            response = c.put(f'/decks/{deck_id2}/rename', json={"name": "Original Deck"})
+            self.assertEqual(response.status_code, 409)  # Conflict
+    
+    def test_37b_rename_deck_empty_name(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            
+            # Create a deck
+            create_resp = self._create_deck(c, "Valid Deck Name")
+            self.assertEqual(create_resp.status_code, 201)
+            deck_id = json.loads(create_resp.data)["id"]
+            
+            # Try to rename with empty name
+            response = c.put(f'/decks/{deck_id}/rename', json={"name": "  "})
+            self.assertEqual(response.status_code, 400)  # Bad request
+    
+    def test_37c_rename_deck_not_found(self):
+        with self.client as c:
+            self._login_user("testuser", "password123")
+            response = c.put('/decks/99999/rename', json={"name": "New Name"})
+            self.assertEqual(response.status_code, 404)
+    
+    def test_37d_rename_deck_unauthorized(self):
+        response = self.client.put('/decks/1/rename', json={"name": "New Name"})
+        self.assertEqual(response.status_code, 401)
+
 
 if __name__ == '__main__':
     unittest.main()

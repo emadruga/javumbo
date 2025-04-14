@@ -303,3 +303,169 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
     *   `401 Unauthorized`: (See Authentication section).
     *   `404 Not Found`: The specified `deck_id` does not exist or does not belong to the user (e.g., `{"error": "Deck not found or access denied."}`).
     *   `500 Internal Server Error`: Database error reading collection or card data (e.g., `{"error": "Collection data not found."}`, `{"error": "Database error occurred while fetching statistics."}`).
+
+### 13. Get Card Details
+
+*   **Endpoint:** `GET /cards/<card_id>`
+*   **Description:** Retrieves the details of a specific card.
+*   **Authentication Required:** Yes
+*   **Path Parameters:**
+    *   `card_id` (integer): The ID of the card to retrieve.
+*   **Request Body:** None
+*   **Success Response:**
+    *   Code: `200 OK`
+    *   Body:
+        ```json
+        {
+          "card_id": integer,
+          "front": "string",
+          "back": "string"
+        }
+        ```
+*   **Error Responses:**
+    *   `401 Unauthorized`: (See Authentication section).
+    *   `404 Not Found`: The specified card does not exist or does not belong to the user (e.g., `{"error": "Card not found"}`).
+    *   `500 Internal Server Error`: Database error reading card data (e.g., `{"error": "Error fetching card: ..."}`).
+
+### 14. Update Card
+
+*   **Endpoint:** `PUT /cards/<card_id>`
+*   **Description:** Updates the content of a specific flashcard.
+*   **Authentication Required:** Yes
+*   **Path Parameters:**
+    *   `card_id` (integer): The ID of the card to update.
+*   **Request Body:**
+    ```json
+    {
+      "front": "string",
+      "back": "string"
+    }
+    ```
+*   **Success Response:**
+    *   Code: `200 OK`
+    *   Body:
+        ```json
+        {
+          "success": true,
+          "message": "Card updated successfully"
+        }
+        ```
+*   **Error Responses:**
+    *   `400 Bad Request`: Front or back content is missing/empty (e.g., `{"error": "Front and back fields are required"}`, `{"error": "Front and back fields cannot be empty"}`).
+    *   `401 Unauthorized`: (See Authentication section).
+    *   `404 Not Found`: The specified card does not exist or does not belong to the user (e.g., `{"error": "Card not found"}`).
+    *   `500 Internal Server Error`: Database error updating the card (e.g., `{"error": "Error updating card: ..."}`).
+
+### 15. Get Deck Cards
+
+*   **Endpoint:** `GET /decks/<deck_id>/cards`
+*   **Description:** Retrieves a paginated list of cards in a specific deck.
+*   **Authentication Required:** Yes
+*   **Path Parameters:**
+    *   `deck_id` (integer): The ID of the deck for which to retrieve cards.
+*   **Query Parameters:**
+    *   `page` (integer, optional): The page number of results to return. Default: 1.
+    *   `per_page` (integer, optional): The number of cards per page. Default: 10.
+*   **Request Body:** None
+*   **Success Response:**
+    *   Code: `200 OK`
+    *   Body:
+        ```json
+        {
+          "deck_id": "string",
+          "deck_name": "string",
+          "cards": [
+            {
+              "card_id": integer,
+              "note_id": integer,
+              "front": "string",
+              "back": "string",
+              "modified": integer
+            },
+            ...
+          ],
+          "pagination": {
+            "total": integer,
+            "page": integer,
+            "per_page": integer,
+            "total_pages": integer
+          }
+        }
+        ```
+*   **Error Responses:**
+    *   `401 Unauthorized`: (See Authentication section).
+    *   `404 Not Found`: The specified deck does not exist or does not belong to the user (e.g., `{"error": "Deck not found"}`).
+    *   `500 Internal Server Error`: Database error fetching deck or card data (e.g., `{"error": "Error fetching cards: ..."}`).
+
+### 16. Delete Card
+
+*   **Endpoint:** `DELETE /cards/<card_id>`
+*   **Description:** Deletes a specific flashcard.
+*   **Authentication Required:** Yes
+*   **Path Parameters:**
+    *   `card_id` (integer): The ID of the card to delete.
+*   **Request Body:** None
+*   **Success Response:**
+    *   Code: `200 OK`
+    *   Body:
+        ```json
+        {
+          "success": true,
+          "message": "Card deleted successfully"
+        }
+        ```
+*   **Error Responses:**
+    *   `401 Unauthorized`: (See Authentication section).
+    *   `404 Not Found`: The specified card does not exist or does not belong to the user (e.g., `{"error": "Card not found"}`).
+    *   `500 Internal Server Error`: Database error deleting the card (e.g., `{"error": "Error deleting card: ..."}`).
+
+### 17. Delete Deck
+
+*   **Endpoint:** `DELETE /decks/<int:deck_id>`
+*   **Description:** Deletes a specific deck and all its cards.
+*   **Authentication Required:** Yes
+*   **Path Parameters:**
+    *   `deck_id` (integer): The ID of the deck to delete.
+*   **Request Body:** None
+*   **Success Response:**
+    *   Code: `200 OK`
+    *   Body:
+        ```json
+        {
+          "message": "Deck 'deck_name' and N cards deleted successfully"
+        }
+        ```
+*   **Error Responses:**
+    *   `401 Unauthorized`: (See Authentication section).
+    *   `404 Not Found`: The specified deck does not exist or does not belong to the user (e.g., `{"error": "Deck not found"}`).
+    *   `500 Internal Server Error`: Database error deleting the deck (e.g., `{"error": "Failed to delete deck due to database error"}`, `{"error": "Failed to delete deck"}`).
+
+### 18. Rename Deck
+
+*   **Endpoint:** `PUT /decks/<int:deck_id>/rename`
+*   **Description:** Renames a specific deck.
+*   **Authentication Required:** Yes
+*   **Path Parameters:**
+    *   `deck_id` (integer): The ID of the deck to rename.
+*   **Request Body:**
+    ```json
+    {
+      "name": "string"
+    }
+    ```
+*   **Success Response:**
+    *   Code: `200 OK`
+    *   Body:
+        ```json
+        {
+          "message": "Deck renamed from 'old_name' to 'new_name' successfully",
+          "id": integer,
+          "name": "string"
+        }
+        ```
+*   **Error Responses:**
+    *   `400 Bad Request`: New deck name is missing or empty (e.g., `{"error": "New deck name cannot be empty"}`).
+    *   `401 Unauthorized`: (See Authentication section).
+    *   `404 Not Found`: The specified deck does not exist or does not belong to the user (e.g., `{"error": "Deck not found"}`).
+    *   `409 Conflict`: A deck with the same name already exists (case-insensitive) (e.g., `{"error": "A deck with this name already exists"}`).
+    *   `500 Internal Server Error`: Database error renaming the deck (e.g., `{"error": "Failed to rename deck due to database error"}`, `{"error": "Failed to rename deck"}`).
