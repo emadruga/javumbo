@@ -29,6 +29,22 @@ const formContainerStyles = {
   marginTop: '-1px' // Align border with tab bottom
 };
 
+// Add custom title styles
+const titleStyles = {
+  fontFamily: "'Montserrat', sans-serif",
+  fontSize: '42px',
+  fontWeight: '700',
+  color: '#4a6eb5',
+  textAlign: 'center',
+  margin: '20px 0',
+  textShadow: '2px 2px 4px rgba(0, 0, 0, 0.1)',
+  letterSpacing: '1px',
+  background: 'linear-gradient(45deg, #4a6eb5, #7a54a8)',
+  WebkitBackgroundClip: 'text',
+  WebkitTextFillColor: 'transparent',
+  padding: '10px 0'
+};
+
 function AuthPage({ onLoginSuccess }) {
   // Restore state
   const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
@@ -38,7 +54,8 @@ function AuthPage({ onLoginSuccess }) {
   return (
     // Restore layout
     <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'Arial, sans-serif' }}>
-      <h1>Flashcard App</h1>
+      {/* Update title to Javumbo with custom styles */}
+      <h1 style={titleStyles}>Javumbo</h1>
       <div>
         {/* Restore tab buttons */}
         <button
