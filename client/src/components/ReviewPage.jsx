@@ -110,18 +110,10 @@ function ReviewPage({ user, onLogout }) {
                   <button className="btn btn-success" onClick={() => handleAnswer(3)}>Good (3)</button>
                   <button className="btn btn-primary" onClick={() => handleAnswer(4)}>Easy (4)</button>
                 </div>
-                <div className="text-center mt-2">
-                  <button className="btn btn-outline-secondary btn-sm" onClick={handleEditCard}>
-                    Edit Card
-                  </button>
-                </div>
               </>
             ) : (
               <div className="d-flex justify-content-between">
                 <button className="btn btn-secondary" onClick={() => setShowAnswer(true)}>Show Answer</button>
-                <button className="btn btn-outline-secondary btn-sm" onClick={handleEditCard}>
-                  Edit Card
-                </button>
               </div>
             )}
           </div>
