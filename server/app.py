@@ -200,11 +200,11 @@ def init_anki_db(db_path, user_name="Default User"):
     default_decks = {
         "1": { # Deck ID 1 = Default deck
             "id": 1,
-            "name": user_name,
+            "name": "Verbal Tenses",
             "mod": crt_time, "usn": -1,
             "lrnToday": [0, 0], "revToday": [0, 0], "newToday": [0, 0],
             "timeToday": [0, 0], "conf": 1, # Refers to dconf ID 1
-            "desc": f"Default deck for {user_name}",
+            "desc": f"English verb tenses deck for {user_name}",
             "dyn": 0, "collapsed": False,
              "extendNew": 10, "extendRev": 50
         }
@@ -357,40 +357,73 @@ def logout():
 # --- Flashcard Generation ---
 
 def generate_ai_flashcards():
-    """Generates a list of 25 flashcards about generative AI."""
-    # In a real app, this might involve calling a GenAI API.
-    # For now, we use a predefined list.
+    """Generates a list of flashcards about verbal tenses in English."""
+    # Each tense has 3 example sentences
     cards = [
-        ("What is Generative AI?", "AI that can create new content, like text, images, or music."),
-        ("What does LLM stand for?", "Large Language Model."),
-        ("Name a popular LLM.", "GPT-4 (Generative Pre-trained Transformer 4) or Gemini."),
-        ("What is a 'prompt' in Generative AI?", "The input text given to the AI model to guide its output."),
-        ("What is 'fine-tuning' an LLM?", "Further training a pre-trained model on a specific dataset for a particular task."),
-        ("What is diffusion in image generation?", "A process starting with noise and gradually refining it into an image based on a prompt."),
-        ("Name a text-to-image generation model.", "Stable Diffusion, DALL-E 2, Midjourney, Imagen."),
-        ("What is 'hallucination' in LLMs?", "When an LLM generates incorrect or nonsensical information confidently."),
-        ("What is Reinforcement Learning from Human Feedback (RLHF)?", "Training a model based on human preferences for its outputs."),
-        ("What is a transformer architecture?", "A neural network architecture heavily relying on self-attention mechanisms, common in LLMs."),
-        ("What does 'multimodal' mean in AI?", "Models that can process and understand multiple types of data (e.g., text and images)."),
-        ("What is 'tokenization' in NLP?", "Breaking down text into smaller units (tokens) like words or subwords."),
-        ("What is the goal of 'alignment' in AI safety?", "Ensuring AI systems act in accordance with human intentions and values."),
-        ("What is 'zero-shot' learning?", "An AI model's ability to perform a task it hasn't been explicitly trained on."),
-        ("What is 'few-shot' learning?", "An AI model's ability to learn a task from only a few examples."),
-        ("What is Generative Adversarial Network (GAN)?", "A framework using two neural networks (generator and discriminator) competing to create realistic data."),
-        ("Who is considered one of the pioneers of GANs?", "Ian Goodfellow."),
-        ("What is 'latent space' in generative models?", "An abstract, lower-dimensional space where data representations are learned."),
-        ("What is CLIP (Contrastive Language–Image Pre-training)?", "A model trained by OpenAI to understand images and text together."),
-        ("How can Generative AI be used in drug discovery?", "Generating novel molecular structures or predicting protein folding."),
-        ("What ethical concerns are associated with Generative AI?", "Misinformation, bias, copyright issues, job displacement, deepfakes."),
-        ("What is 'prompt engineering'?", "The skill of crafting effective prompts to get desired outputs from generative models."),
-        ("What is a vector database used for with LLMs?", "Storing and efficiently searching text embeddings for context retrieval (RAG)."),
-        ("What does RAG stand for in LLMs?", "Retrieval-Augmented Generation."),
-        ("What is the difference between discriminative and generative AI?", "Discriminative models classify data (e.g., spam detection), generative models create new data.")
+        # Simple Present
+        ("Simple Present: I work", "Usage: For habits, routines, facts, and general truths.\nExample 1: She plays tennis every weekend.\nExample 2: The sun rises in the east.\nExample 3: They live in New York."),
+        ("Simple Present: Negatives", "Form: Subject + do/does + not + verb\nExample 1: I do not (don't) speak French.\nExample 2: He does not (doesn't) own a car.\nExample 3: They do not (don't) like coffee."),
+        ("Simple Present: Questions", "Form: Do/Does + subject + verb?\nExample 1: Do you enjoy swimming?\nExample 2: Does she work here?\nExample 3: Do they understand the rules?"),
+        
+        # Present Continuous/Progressive
+        ("Present Continuous: I am working", "Usage: For actions happening now or around now, and temporary situations.\nExample 1: She is studying for her exam.\nExample 2: They are building a new house this year.\nExample 3: I am learning to play the guitar."),
+        ("Present Continuous: Negatives", "Form: Subject + am/is/are + not + verb-ing\nExample 1: He is not (isn't) sleeping right now.\nExample 2: We are not (aren't) having dinner yet.\nExample 3: I am not waiting any longer."),
+        ("Present Continuous: Questions", "Form: Am/Is/Are + subject + verb-ing?\nExample 1: Are you listening to me?\nExample 2: Is it raining outside?\nExample 3: Are they coming to the party?"),
+        
+        # Present Perfect
+        ("Present Perfect: I have worked", "Usage: For past actions with present results, experiences, and unfinished time periods.\nExample 1: I have visited Paris twice.\nExample 2: She has lived here for five years.\nExample 3: They have already finished their homework."),
+        ("Present Perfect: Negatives", "Form: Subject + have/has + not + past participle\nExample 1: I have not (haven't) seen that movie.\nExample 2: She has not (hasn't) called me back.\nExample 3: We have not (haven't) been to that restaurant."),
+        ("Present Perfect: Questions", "Form: Have/Has + subject + past participle?\nExample 1: Have you ever climbed a mountain?\nExample 2: Has he sent the email?\nExample 3: Have they arrived yet?"),
+        
+        # Present Perfect Continuous
+        ("Present Perfect Continuous: I have been working", "Usage: For ongoing actions that started in the past and continue to the present, often emphasizing duration.\nExample 1: I have been waiting for an hour.\nExample 2: She has been teaching since 2010.\nExample 3: They have been traveling all month."),
+        ("Present Perfect Continuous: Negatives", "Form: Subject + have/has + not + been + verb-ing\nExample 1: I have not (haven't) been feeling well.\nExample 2: He has not (hasn't) been working lately.\nExample 3: They have not (haven't) been studying enough."),
+        ("Present Perfect Continuous: Questions", "Form: Have/Has + subject + been + verb-ing?\nExample 1: Have you been exercising regularly?\nExample 2: Has she been living alone?\nExample 3: Have they been practicing for the concert?"),
+        
+        # Simple Past
+        ("Simple Past: I worked", "Usage: For completed actions in the past.\nExample 1: She visited her grandmother last week.\nExample 2: They bought a new car yesterday.\nExample 3: I watched a movie last night."),
+        ("Simple Past: Negatives", "Form: Subject + did + not + verb\nExample 1: I did not (didn't) go to the party.\nExample 2: She did not (didn't) like the book.\nExample 3: They did not (didn't) finish their work."),
+        ("Simple Past: Questions", "Form: Did + subject + verb?\nExample 1: Did you call him?\nExample 2: Did she arrive on time?\nExample 3: Did they win the game?"),
+        
+        # Past Continuous/Progressive
+        ("Past Continuous: I was working", "Usage: For actions in progress at a specific time in the past, often interrupted by another action.\nExample 1: I was reading when the phone rang.\nExample 2: They were having dinner at 8 PM.\nExample 3: She was sleeping when I came home."),
+        ("Past Continuous: Negatives", "Form: Subject + was/were + not + verb-ing\nExample 1: I was not (wasn't) listening carefully.\nExample 2: They were not (weren't) expecting visitors.\nExample 3: She was not (wasn't) driving fast."),
+        ("Past Continuous: Questions", "Form: Was/Were + subject + verb-ing?\nExample 1: Were you waiting for me?\nExample 2: Was he telling the truth?\nExample 3: Were they working late?"),
+        
+        # Past Perfect
+        ("Past Perfect: I had worked", "Usage: For actions completed before another past action or time.\nExample 1: I had finished dinner before she called.\nExample 2: They had left before I arrived.\nExample 3: She had studied Spanish before moving to Madrid."),
+        ("Past Perfect: Negatives", "Form: Subject + had + not + past participle\nExample 1: I had not (hadn't) seen the movie before.\nExample 2: She had not (hadn't) completed her work.\nExample 3: They had not (hadn't) heard the news."),
+        ("Past Perfect: Questions", "Form: Had + subject + past participle?\nExample 1: Had you met him before?\nExample 2: Had she ever visited London?\nExample 3: Had they received my message?"),
+        
+        # Past Perfect Continuous
+        ("Past Perfect Continuous: I had been working", "Usage: For ongoing actions that started before and continued up to another time in the past, emphasizing duration.\nExample 1: I had been studying for three hours when she called.\nExample 2: They had been living there for years before they moved.\nExample 3: She had been working all day before she went home."),
+        ("Past Perfect Continuous: Negatives", "Form: Subject + had + not + been + verb-ing\nExample 1: I had not (hadn't) been sleeping well before the exam.\nExample 2: She had not (hadn't) been feeling well.\nExample 3: They had not (hadn't) been paying attention."),
+        ("Past Perfect Continuous: Questions", "Form: Had + subject + been + verb-ing?\nExample 1: Had you been waiting long?\nExample 2: Had she been working there before?\nExample 3: Had they been expecting this outcome?"),
+        
+        # Simple Future
+        ("Simple Future: I will work", "Usage: For predictions, promises, offers, and decisions made at the moment of speaking.\nExample 1: I will help you tomorrow.\nExample 2: She will probably arrive late.\nExample 3: They will be here soon."),
+        ("Simple Future: Negatives", "Form: Subject + will + not + verb\nExample 1: I will not (won't) be available tomorrow.\nExample 2: She will not (won't) agree to these terms.\nExample 3: They will not (won't) finish on time."),
+        ("Simple Future: Questions", "Form: Will + subject + verb?\nExample 1: Will you attend the meeting?\nExample 2: Will she join us for dinner?\nExample 3: Will they accept our offer?"),
+        
+        # Future Continuous/Progressive
+        ("Future Continuous: I will be working", "Usage: For actions that will be in progress at a specific time in the future.\nExample 1: This time tomorrow, I will be flying to Paris.\nExample 2: She will be studying when you call.\nExample 3: They will be waiting for us when we arrive."),
+        ("Future Continuous: Negatives", "Form: Subject + will + not + be + verb-ing\nExample 1: I will not (won't) be working this weekend.\nExample 2: She will not (won't) be attending the conference.\nExample 3: They will not (won't) be staying with us."),
+        ("Future Continuous: Questions", "Form: Will + subject + be + verb-ing?\nExample 1: Will you be using the car tomorrow?\nExample 2: Will she be coming to the party?\nExample 3: Will they be joining us for lunch?"),
+        
+        # Future Perfect
+        ("Future Perfect: I will have worked", "Usage: For actions that will be completed before a specific time in the future.\nExample 1: By next month, I will have finished my degree.\nExample 2: She will have completed the project by Friday.\nExample 3: They will have moved into their new house by Christmas."),
+        ("Future Perfect: Negatives", "Form: Subject + will + not + have + past participle\nExample 1: I will not (won't) have read the book by then.\nExample 2: She will not (won't) have arrived by that time.\nExample 3: They will not (won't) have made a decision before the deadline."),
+        ("Future Perfect: Questions", "Form: Will + subject + have + past participle?\nExample 1: Will you have finished by tomorrow?\nExample 2: Will she have prepared everything?\nExample 3: Will they have solved the problem by then?"),
+        
+        # Future Perfect Continuous
+        ("Future Perfect Continuous: I will have been working", "Usage: For ongoing actions that will continue up to a specific time in the future, emphasizing duration.\nExample 1: By next week, I will have been working here for five years.\nExample 2: She will have been studying for six hours by the time she finishes.\nExample 3: They will have been traveling for two days when they arrive."),
+        ("Future Perfect Continuous: Negatives", "Form: Subject + will + not + have + been + verb-ing\nExample 1: I will not (won't) have been waiting for more than an hour.\nExample 2: She will not (won't) have been teaching for very long.\nExample 3: They will not (won't) have been living there for much time."),
+        ("Future Perfect Continuous: Questions", "Form: Will + subject + have + been + verb-ing?\nExample 1: Will you have been working all day?\nExample 2: Will she have been practicing enough?\nExample 3: Will they have been searching for long?")
     ]
     return cards
 
 def add_initial_flashcards(db_path, model_id):
-    """Adds the initial set of 25 generative AI flashcards to the user's Anki DB."""
+    """Adds the initial set of flashcards about verbal tenses to the user's Anki DB."""
     cards_to_add = generate_ai_flashcards()
     conn = None
     try:
@@ -413,7 +446,7 @@ def add_initial_flashcards(db_path, model_id):
             cursor.execute("""
                 INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (note_id, guid, model_id, current_time_sec, usn, "gen_ai initial", fields, front, int(checksum, 16) & 0xFFFFFFFF, 0, ""))
+            """, (note_id, guid, model_id, current_time_sec, usn, "verbal_tenses", fields, front, int(checksum, 16) & 0xFFFFFFFF, 0, ""))
 
             # Insert Card (New card state)
             cursor.execute("""
