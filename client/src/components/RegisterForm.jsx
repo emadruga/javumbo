@@ -142,7 +142,7 @@ function RegisterForm({ onRegisterSuccess }) {
         placeholder={t('auth.confirmPasswordPlaceholder')}
         title={t('auth.errors.required')}
       />
-      <button type="submit" disabled={loading} style={buttonStyle}>
+      <button type="submit" disabled={loading} style={{...buttonStyle, marginRight: '10px'}}>
         {loading ? t('auth.registering') : t('auth.registerButton')}
       </button>
     </form>

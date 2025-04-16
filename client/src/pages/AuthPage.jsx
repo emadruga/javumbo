@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import LoginForm from '../components/LoginForm.jsx';
 import RegisterForm from '../components/RegisterForm.jsx';
-import AuthLanguageSelector from '../components/AuthLanguageSelector';
 
 // Restore styles
 const tabStyles = {
@@ -45,12 +44,6 @@ const titleStyles = {
   padding: '10px 0'
 };
 
-const languageSelectorContainerStyle = {
-  position: 'absolute',
-  top: '20px',
-  right: '20px'
-};
-
 function AuthPage({ onLoginSuccess }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('login');
@@ -58,33 +51,28 @@ function AuthPage({ onLoginSuccess }) {
   console.log(`Rendering AuthPage - active tab: ${activeTab}`);
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh' }}>
-      <div style={languageSelectorContainerStyle}>
-        <AuthLanguageSelector />
+    <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'Arial, sans-serif' }}>
+      <h1 style={titleStyles}>{t('app.title')}</h1>
+      <div>
+        <button
+          style={activeTab === 'login' ? activeTabStyles : inactiveTabStyles}
+          onClick={() => setActiveTab('login')}
+        >
+          {t('auth.login')}
+        </button>
+        <button
+          style={activeTab === 'register' ? activeTabStyles : inactiveTabStyles}
+          onClick={() => setActiveTab('register')}
+        >
+          {t('auth.register')}
+        </button>
       </div>
-      <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'Arial, sans-serif' }}>
-        <h1 style={titleStyles}>{t('app.title')}</h1>
-        <div>
-          <button
-            style={activeTab === 'login' ? activeTabStyles : inactiveTabStyles}
-            onClick={() => setActiveTab('login')}
-          >
-            {t('auth.login')}
-          </button>
-          <button
-            style={activeTab === 'register' ? activeTabStyles : inactiveTabStyles}
-            onClick={() => setActiveTab('register')}
-          >
-            {t('auth.register')}
-          </button>
-        </div>
-        <div style={formContainerStyles}>
-          {activeTab === 'login' ? (
-            <LoginForm onLoginSuccess={onLoginSuccess} />
-          ) : (
-            <RegisterForm onRegisterSuccess={() => setActiveTab('login')} />
-          )}
-        </div>
+      <div style={formContainerStyles}>
+        {activeTab === 'login' ? (
+          <LoginForm onLoginSuccess={onLoginSuccess} />
+        ) : (
+          <RegisterForm onRegisterSuccess={() => setActiveTab('login')} />
+        )}
       </div>
     </div>
   );

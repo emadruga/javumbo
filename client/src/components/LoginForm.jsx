@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../api/axiosConfig.js'; // Make sure path is correct
+import AuthLanguageSelector from './AuthLanguageSelector';
 
 // Restore styles
 const inputStyle = {
@@ -22,6 +23,13 @@ const buttonStyle = {
 const errorStyle = {
   color: 'red',
   marginBottom: '10px'
+};
+
+const buttonContainerStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginTop: '20px'
 };
 
 function LoginForm({ onLoginSuccess }) {
@@ -94,9 +102,12 @@ function LoginForm({ onLoginSuccess }) {
         placeholder={t('auth.passwordPlaceholder')}
         title={t('auth.errors.required')}
       />
-      <button type="submit" disabled={loading} style={buttonStyle}>
-        {loading ? t('auth.loggingIn') : t('auth.loginButton')}
-      </button>
+      <div style={buttonContainerStyle}>
+        <button type="submit" disabled={loading} style={buttonStyle}>
+          {loading ? t('auth.loggingIn') : t('auth.loginButton')}
+        </button>
+        <AuthLanguageSelector />
+      </div>
     </form>
   );
 }
