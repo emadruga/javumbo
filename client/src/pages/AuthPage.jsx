@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-// Uncomment LoginForm import
+import { useTranslation } from 'react-i18next';
 import LoginForm from '../components/LoginForm.jsx';
-// Uncomment RegisterForm import
 import RegisterForm from '../components/RegisterForm.jsx';
+import AuthLanguageSelector from '../components/AuthLanguageSelector';
 
 // Restore styles
 const tabStyles = {
@@ -45,42 +45,49 @@ const titleStyles = {
   padding: '10px 0'
 };
 
+const languageSelectorContainerStyle = {
+  position: 'absolute',
+  top: '20px',
+  right: '20px'
+};
+
 function AuthPage({ onLoginSuccess }) {
-  // Restore state
-  const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState('login');
 
   console.log(`Rendering AuthPage - active tab: ${activeTab}`);
 
   return (
-    // Restore layout
-    <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'Arial, sans-serif' }}>
-      {/* Update title to Javumbo with custom styles */}
-      <h1 style={titleStyles}>Javumbo</h1>
-      <div>
-        {/* Restore tab buttons */}
-        <button
-          style={activeTab === 'login' ? activeTabStyles : inactiveTabStyles}
-          onClick={() => setActiveTab('login')}
-        >
-          Login
-        </button>
-        <button
-          style={activeTab === 'register' ? activeTabStyles : inactiveTabStyles}
-          onClick={() => setActiveTab('register')}
-        >
-          Register
-        </button>
+    <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <div style={languageSelectorContainerStyle}>
+        <AuthLanguageSelector />
       </div>
-      <div style={formContainerStyles}>
-        {/* Render placeholders instead of actual forms */}
-        {activeTab === 'login' ? (
-          <LoginForm onLoginSuccess={onLoginSuccess} />
-        ) : (
-          <RegisterForm onRegisterSuccess={() => setActiveTab('login')} />
-        )}
+      <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'Arial, sans-serif' }}>
+        <h1 style={titleStyles}>{t('app.title')}</h1>
+        <div>
+          <button
+            style={activeTab === 'login' ? activeTabStyles : inactiveTabStyles}
+            onClick={() => setActiveTab('login')}
+          >
+            {t('auth.login')}
+          </button>
+          <button
+            style={activeTab === 'register' ? activeTabStyles : inactiveTabStyles}
+            onClick={() => setActiveTab('register')}
+          >
+            {t('auth.register')}
+          </button>
+        </div>
+        <div style={formContainerStyles}>
+          {activeTab === 'login' ? (
+            <LoginForm onLoginSuccess={onLoginSuccess} />
+          ) : (
+            <RegisterForm onRegisterSuccess={() => setActiveTab('login')} />
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-export default AuthPage; 
+export default AuthPage;

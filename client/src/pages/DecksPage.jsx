@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Header from '../components/Header'; // Use shared header
 import api from '../api/axiosConfig';
 import fileDownload from 'js-file-download'; // Import for export
 import { getDeckCards, deleteCard } from '../api'; // Import API functions
+import '@fontsource/material-icons';
 
 // Basic styling (consider moving to CSS)
 const pageStyle = {
@@ -128,7 +130,13 @@ const paginationStyle = {
 
 const paginationButtonStyle = {
   ...buttonStyle,
-  padding: '5px 10px'
+  padding: '5px 10px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  fontFamily: 'Material Icons',
+  fontSize: '24px',  // Adjust size for Material Icons
+  lineHeight: '1'    // Ensure proper vertical alignment
 };
 
 // New styles for confirmation modal
@@ -202,6 +210,7 @@ const dropdownItemStyle = {
 };
 
 function DecksPage({ user, onLogout }) {
+  const { t } = useTranslation();
   const [decks, setDecks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -262,29 +271,32 @@ function DecksPage({ user, onLogout }) {
   };
   
   // Function to handle dropdown menu item clicks
-  const handleDropdownAction = (e, action, deckId, deckName) => {
+  const handleDropdownAction = async (e, action, deck) => {
     e.stopPropagation(); // Prevent event from bubbling up
     setOpenDropdownId(null);
     
-    switch(action) {
+    switch (action) {
       case 'review':
-        handleSelectDeck(deckId);
+        handleSelectDeck(deck.id, deck.name);
         break;
       case 'stats':
-        localStorage.setItem('currentDeckName', deckName || 'Unknown Deck');
-        navigate(`/decks/${deckId}/stats`);
+        localStorage.setItem('currentDeckName', deck.name || 'Unknown Deck');
+        navigate(`/decks/${deck.id}/stats`);
         break;
       case 'browse':
-        handleViewCards(deckId);
+        handleViewCards(deck.id);
         break;
       case 'rename':
-        handleDeckRenameClick(deckId, deckName);
+        handleDeckRenameClick(deck.id, deck.name);
+        break;
+      case 'addCard':
+        navigate(`/decks/${deck.id}/cards/new`);
         break;
       case 'delete':
-        handleDeckDeleteClick(deckId, deckName);
+        handleDeckDeleteClick(deck.id, deck.name);
         break;
       default:
-        break;
+        console.warn('Unknown action:', action);
     }
   };
 
@@ -296,14 +308,14 @@ function DecksPage({ user, onLogout }) {
       setDecks(response.data || []);
     } catch (err) {
       console.error("Error fetching decks:", err);
-      setError("Failed to load decks. Please try again later.");
+      setError(t('decks.errorFetching'));
       if (err.response?.status === 401) {
         onLogout();
       }
     } finally {
       setIsLoading(false);
     }
-  }, [onLogout]);
+  }, [onLogout, t]);
 
   useEffect(() => {
     fetchDecks();
@@ -344,40 +356,29 @@ function DecksPage({ user, onLogout }) {
   const handleCreateDeck = async (e) => {
     e.preventDefault();
     if (!newDeckName.trim()) {
-        setError('Deck name cannot be empty.');
-        return;
+      setError(t('decks.errorNameRequired'));
+      return;
     }
+
     setIsCreating(true);
     setError('');
     try {
-        await api.post('/decks', { name: newDeckName.trim() });
-        setNewDeckName(''); // Clear input
-        fetchDecks(); // Refresh deck list
+      await api.post('/decks', { name: newDeckName });
+      setNewDeckName('');
+      fetchDecks();
     } catch (err) {
-        console.error("Error creating deck:", err);
-        if (err.response && err.response.data && err.response.data.error) {
-            setError(err.response.data.error);
-        } else {
-            setError('Failed to create deck.');
-        }
-         if (err.response?.status === 401) {
-            onLogout();
-         }
+      console.error("Error creating deck:", err);
+      setError(t('decks.errorCreating'));
     } finally {
-        setIsCreating(false);
+      setIsCreating(false);
     }
   };
 
-  const handleSelectDeck = async (deckId) => {
-    // Optional: Add loading state for selection
+  const handleSelectDeck = async (deckId, deckName) => {
     setError('');
     try {
         await api.put('/decks/current', { deckId });
-        console.log(`Set current deck to ${deckId}`);
-
-        // Find the deck name from the state
-        const selectedDeck = decks.find(deck => deck.id === deckId);
-        const deckName = selectedDeck ? selectedDeck.name : 'Unknown Deck';
+        console.log(`Set current deck to ${deckName}`);
 
         // Store the name in localStorage
         localStorage.setItem('currentDeckName', deckName);
@@ -386,10 +387,10 @@ function DecksPage({ user, onLogout }) {
         navigate('/review'); // Navigate to review page for the selected deck
     } catch (err) {
         console.error("Error setting current deck:", err);
-         setError('Failed to select deck. Please try again.');
-         if (err.response?.status === 401) {
+        setError(t('decks.errorSelectingDeck'));
+        if (err.response?.status === 401) {
             onLogout();
-         }
+        }
     }
   };
 
@@ -605,44 +606,48 @@ function DecksPage({ user, onLogout }) {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="container mt-4">
+        <Header user={user} onLogout={onLogout} />
+        <p>{t('common.loading')}</p>
+      </div>
+    );
+  }
+
   return (
     <div style={pageStyle}>
-      {/* Pass null for onExport in Header */}
       <Header user={user} onLogout={onLogout} />
 
-      {/* Navigation tabs */}
       <div>
         <div style={navbarStyle}>
           <button 
             style={activeView === 'decks' ? activeNavItemStyle : navItemStyle}
             onClick={() => setActiveView('decks')}
           >
-            Decks
+            {t('decks.decks')}
           </button>
           {selectedDeck && (
             <button 
               style={activeView === 'cards' ? activeNavItemStyle : navItemStyle}
               onClick={() => handleViewCards(selectedDeck.id)}
             >
-              Cards in {selectedDeck.name}
+              {t('decks.cardsIn', { deckName: selectedDeck.name })}
             </button>
           )}
         </div>
       </div>
 
       {activeView === 'decks' ? (
-        // DECKS VIEW
         <>
-          <h1>Your Decks</h1>
+          <h1>{t('decks.title')}</h1>
 
-          {/* Add Export Button Here */}
           <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
             <button onClick={handleExport} disabled={isExporting} style={exportButtonStyle}> 
-                {isExporting ? 'Exporting...' : 'Export Collection'}
+                {isExporting ? t('common.exporting') : t('decks.exportCollection')}
             </button>
           </div>
 
-          {isLoading && <p>Loading decks...</p>}
           {error && <p style={errorStyle}>{error}</p>}
 
           {!isLoading && (
@@ -663,40 +668,40 @@ function DecksPage({ user, onLogout }) {
                       <div style={dropdownMenuStyle}>
                         <button 
                           style={{...dropdownItemStyle, color: '#28a745'}}
-                          onClick={(e) => handleDropdownAction(e, 'review', deck.id, deck.name)}
+                          onClick={(e) => handleDropdownAction(e, 'review', deck)}
                         >
-                          Review
+                          {t('decks.review')}
                         </button>
                         <button 
                           style={{...dropdownItemStyle, color: '#17a2b8'}}
-                          onClick={(e) => handleDropdownAction(e, 'stats', deck.id, deck.name)}
+                          onClick={(e) => handleDropdownAction(e, 'stats', deck)}
                         >
-                          Stats
+                          {t('decks.statistics')}
                         </button>
                         <button 
                           style={{...dropdownItemStyle, color: '#6c757d'}}
-                          onClick={(e) => handleDropdownAction(e, 'browse', deck.id, deck.name)}
+                          onClick={(e) => handleDropdownAction(e, 'browse', deck)}
                         >
-                          Browse
+                          {t('decks.browse')}
                         </button>
                         <button 
                           style={{...dropdownItemStyle, color: '#ffc107'}}
-                          onClick={(e) => handleDropdownAction(e, 'rename', deck.id, deck.name)}
+                          onClick={(e) => handleDropdownAction(e, 'rename', deck)}
                         >
-                          Rename
+                          {t('decks.rename')}
                         </button>
                         <button 
                           style={{...dropdownItemStyle, color: '#dc3545'}}
-                          onClick={(e) => handleDropdownAction(e, 'delete', deck.id, deck.name)}
+                          onClick={(e) => handleDropdownAction(e, 'delete', deck)}
                         >
-                          Delete
+                          {t('common.delete')}
                         </button>
                       </div>
                     )}
                   </div>
                 </li>
               ))}
-              {decks.length === 0 && !error && <p>You don't have any decks yet. Create one below!</p>}
+              {decks.length === 0 && !error && <p>{t('decks.noDecks')}</p>}
             </ul>
           )}
 
@@ -705,21 +710,20 @@ function DecksPage({ user, onLogout }) {
                 type="text"
                 value={newDeckName}
                 onChange={(e) => setNewDeckName(e.target.value)}
-                placeholder="New deck name"
+                placeholder={t('decks.deckName')}
                 style={inputStyle}
                 required
             />
             <button type="submit" disabled={isCreating} style={createButtonStyle}>
-                {isCreating ? 'Creating...' : 'Create Deck'}
+                {isCreating ? t('common.loading') : t('decks.createButton')}
             </button>
           </form>
         </>
       ) : (
-        // CARDS VIEW
         <>
-          <h1>Cards in {selectedDeck?.name || 'Deck'}</h1>
+          <h1>{t('decks.cardsIn', { deckName: selectedDeck?.name || t('decks.deck') })}</h1>
           
-          {isLoadingCards && <p>Loading cards...</p>}
+          {isLoadingCards && <p>{t('common.loading')}</p>}
           {cardsError && <p style={errorStyle}>{cardsError}</p>}
           
           {!isLoadingCards && (
@@ -740,11 +744,11 @@ function DecksPage({ user, onLogout }) {
                     {expandedCardId === card.card_id && (
                       <div style={cardContentStyle}>
                         <div style={{ marginBottom: '15px' }}>
-                          <h5>Front</h5>
+                          <h5>{t('decks.front')}</h5>
                           <p>{card.front}</p>
                         </div>
                         <div style={{ marginBottom: '15px' }}>
-                          <h5>Back</h5>
+                          <h5>{t('decks.back')}</h5>
                           <p>{card.back}</p>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
@@ -752,13 +756,13 @@ function DecksPage({ user, onLogout }) {
                             onClick={() => handleEditCard(card.card_id)}
                             style={{...buttonStyle, backgroundColor: '#007bff', color: 'white'}}
                           >
-                            Edit
+                            {t('decks.edit')}
                           </button>
                           <button 
                             onClick={() => handleDeleteClick(card)}
                             style={deleteButtonStyle}
                           >
-                            Delete
+                            {t('common.delete')}
                           </button>
                         </div>
                       </div>
@@ -766,43 +770,46 @@ function DecksPage({ user, onLogout }) {
                   </li>
                 ))}
                 {cards.length === 0 && !cardsError && 
-                  <p>No cards in this deck. Add some cards first!</p>
+                  <p>{t('decks.noCards')}</p>
                 }
               </ul>
               
-              {/* Pagination */}
               {pagination.total_pages > 1 && (
                 <div style={paginationStyle}>
                   <button 
                     style={paginationButtonStyle}
                     onClick={() => handlePageChange(1)}
                     disabled={currentPage === 1}
+                    title={t('common.first')}
                   >
-                    First
+                    first_page
                   </button>
                   <button 
                     style={paginationButtonStyle}
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
+                    title={t('common.prev')}
                   >
-                    Prev
+                    navigate_before
                   </button>
                   <span style={{ padding: '5px 10px' }}>
-                    Page {currentPage} of {pagination.total_pages}
+                    {t('decks.page', { currentPage, totalPages: pagination.total_pages })}
                   </span>
                   <button 
                     style={paginationButtonStyle}
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === pagination.total_pages}
+                    title={t('common.next')}
                   >
-                    Next
+                    navigate_next
                   </button>
                   <button 
                     style={paginationButtonStyle}
                     onClick={() => handlePageChange(pagination.total_pages)}
                     disabled={currentPage === pagination.total_pages}
+                    title={t('common.last')}
                   >
-                    Last
+                    last_page
                   </button>
                 </div>
               )}
@@ -811,15 +818,14 @@ function DecksPage({ user, onLogout }) {
         </>
       )}
 
-      {/* Delete Card Confirmation Modal */}
       {showDeleteModal && (
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
-            <h3>Delete Card</h3>
-            <p>Are you sure you want to delete this card?</p>
+            <h3>{t('common.deleteCard')}</h3>
+            <p>{t('decks.confirmDeleteCard')}</p>
             {cardToDelete && (
               <div style={{ backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '4px', margin: '10px 0' }}>
-                <strong>Front:</strong> {cardToDelete.front.length > 50 
+                <strong>{t('decks.front')}:</strong> {cardToDelete.front.length > 50 
                   ? cardToDelete.front.substring(0, 50) + '...' 
                   : cardToDelete.front}
               </div>
@@ -830,29 +836,28 @@ function DecksPage({ user, onLogout }) {
                 style={buttonStyle}
                 disabled={isDeleting}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button 
                 onClick={handleConfirmDelete}
                 style={deleteButtonStyle}
                 disabled={isDeleting}
               >
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                {isDeleting ? t('common.deleting') : t('common.delete')}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Deck Confirmation Modal */}
       {showDeckDeleteModal && (
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
-            <h3>Delete Deck</h3>
-            <p>Are you sure you want to delete this deck? This will delete all cards in the deck and cannot be undone.</p>
+            <h3>{t('common.deleteDeck')}</h3>
+            <p>{t('decks.confirmDeleteDeck')}</p>
             {deckToDelete && (
               <div style={{ backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '4px', margin: '10px 0' }}>
-                <strong>Deck:</strong> {deckToDelete.name}
+                <strong>{t('decks.deck')}:</strong> {deckToDelete.name}
               </div>
             )}
             <div style={modalButtonsStyle}>
@@ -861,29 +866,28 @@ function DecksPage({ user, onLogout }) {
                 style={buttonStyle}
                 disabled={isDeckDeleting}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button 
                 onClick={handleConfirmDeckDelete}
                 style={deleteButtonStyle}
                 disabled={isDeckDeleting}
               >
-                {isDeckDeleting ? 'Deleting...' : 'Delete'}
+                {isDeckDeleting ? t('common.deleting') : t('common.delete')}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Rename Deck Modal */}
       {showDeckRenameModal && (
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
-            <h3>Rename Deck</h3>
-            <p>Enter a new name for this deck:</p>
+            <h3>{t('decks.renameDeck')}</h3>
+            <p>{t('decks.enterNewName')}</p>
             {deckToRename && (
               <div style={{ marginBottom: '15px' }}>
-                <strong>Current name:</strong> {deckToRename.name}
+                <strong>{t('decks.currentName')}:</strong> {deckToRename.name}
               </div>
             )}
             <div style={{ marginBottom: '20px' }}>
@@ -891,7 +895,7 @@ function DecksPage({ user, onLogout }) {
                 type="text"
                 value={newDeckRename}
                 onChange={(e) => setNewDeckRename(e.target.value)}
-                placeholder="Enter new deck name"
+                placeholder={t('decks.enterNewName')}
                 style={{...inputStyle, width: '100%'}}
                 required
               />
@@ -902,14 +906,14 @@ function DecksPage({ user, onLogout }) {
                 style={buttonStyle}
                 disabled={isRenaming}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button 
                 onClick={handleConfirmDeckRename}
                 style={{...buttonStyle, backgroundColor: '#ffc107', color: 'black'}}
                 disabled={isRenaming || !newDeckRename.trim()}
               >
-                {isRenaming ? 'Renaming...' : 'Rename'}
+                {isRenaming ? t('common.renaming') : t('decks.rename')}
               </button>
             </div>
           </div>
