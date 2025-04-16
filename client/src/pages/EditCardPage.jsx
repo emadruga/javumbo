@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Header from '../components/Header';
 import { getCard, updateCard } from '../api'; // Import the API functions
 
@@ -56,6 +57,7 @@ const successStyle = { ...messageStyle, color: 'green' };
 const errorStyle = { ...messageStyle, color: 'red' };
 
 function EditCardPage({ user, onLogout }) {
+  const { t } = useTranslation();
   const { cardId } = useParams();
   const navigate = useNavigate();
   
@@ -80,7 +82,7 @@ function EditCardPage({ user, onLogout }) {
         if (err.response && err.response.data && err.response.data.error) {
           setError(err.response.data.error);
         } else {
-          setError('Failed to load card data. Please try again later.');
+          setError(t('cards.errorLoading'));
         }
         if (err.response?.status === 401) {
           onLogout();
@@ -93,7 +95,7 @@ function EditCardPage({ user, onLogout }) {
     if (cardId) {
       fetchCardData();
     }
-  }, [cardId, onLogout]);
+  }, [cardId, onLogout, t]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -101,15 +103,14 @@ function EditCardPage({ user, onLogout }) {
     setError('');
 
     if (!front.trim() || !back.trim()) {
-        setError('Both Front and Back fields are required.');
+        setError(t('cards.errorRequired'));
         return;
     }
 
     setLoading(true);
     try {
         await updateCard(cardId, { front, back });
-        setMessage('Card updated successfully!');
-        // Wait a moment to show the success message before navigating
+        setMessage(t('cards.updateSuccess'));
         setTimeout(() => {
           navigate(-1); // Go back to previous page
         }, 1500);
@@ -119,7 +120,7 @@ function EditCardPage({ user, onLogout }) {
         if (err.response && err.response.data && err.response.data.error) {
             setError(err.response.data.error);
         } else {
-            setError('Failed to update card. Please try again later.');
+            setError(t('cards.errorUpdating'));
         }
         if (err.response?.status === 401) {
             onLogout();
@@ -137,8 +138,8 @@ function EditCardPage({ user, onLogout }) {
     return (
       <div style={pageStyle}>
         <Header user={user} onLogout={onLogout} />
-        <h1>Edit Flashcard</h1>
-        <p>Loading card data...</p>
+        <h1>{t('cards.editTitle')}</h1>
+        <p>{t('common.loading')}</p>
       </div>
     );
   }
@@ -147,26 +148,28 @@ function EditCardPage({ user, onLogout }) {
     <div style={pageStyle}>
       <Header user={user} onLogout={onLogout} />
 
-      <h1>Edit Flashcard</h1>
+      <h1>{t('cards.editTitle')}</h1>
 
       <form onSubmit={handleSubmit} style={formStyle}>
         <div>
-          <label htmlFor="front" style={labelStyle}>Front:</label>
+          <label htmlFor="front" style={labelStyle}>{t('cards.front')}:</label>
           <textarea
             id="front"
             value={front}
             onChange={(e) => setFront(e.target.value)}
             style={textareaStyle}
+            placeholder={t('cards.frontPlaceholder')}
             required
           />
         </div>
         <div>
-          <label htmlFor="back" style={labelStyle}>Back:</label>
+          <label htmlFor="back" style={labelStyle}>{t('cards.back')}:</label>
           <textarea
             id="back"
             value={back}
             onChange={(e) => setBack(e.target.value)}
             style={textareaStyle}
+            placeholder={t('cards.backPlaceholder')}
             required
           />
         </div>
@@ -176,10 +179,10 @@ function EditCardPage({ user, onLogout }) {
 
         <div style={{ display: 'flex' }}>
           <button type="submit" disabled={loading} style={buttonStyle}>
-            {loading ? 'Updating...' : 'Update Card'}
+            {loading ? t('common.updating') : t('cards.update')}
           </button>
           <button type="button" onClick={handleCancel} style={cancelButtonStyle}>
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       </form>

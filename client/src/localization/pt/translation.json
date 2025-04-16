@@ -66,11 +66,16 @@
     "edit": "Editar Cartão",
     "delete": "Excluir",
     "save": "Salvar",
+    "update": "Atualizar Cartão",
+    "editTitle": "Editar Cartão",
     "addTo": "Adicionar ao Baralho:",
     "selectDeck": "Selecione um baralho",
     "errorRequired": "Os campos Frente e Verso são obrigatórios.",
     "errorAdding": "Erro ao adicionar o cartão. Por favor, tente novamente mais tarde.",
+    "errorLoading": "Erro ao carregar o cartão. Por favor, tente novamente mais tarde.",
+    "errorUpdating": "Erro ao atualizar o cartão. Por favor, tente novamente mais tarde.",
     "addSuccess": "Cartão adicionado com sucesso!",
+    "updateSuccess": "Cartão atualizado com sucesso!",
     "frontPlaceholder": "Digite a frente do cartão",
     "backPlaceholder": "Digite o verso do cartão"
   },
@@ -112,7 +117,8 @@
     "back": "Voltar",
     "welcome": "Bem-vindo, {{name}}!",
     "toggleNav": "Alternar navegação",
-    "exporting": "Exportando..."
+    "exporting": "Exportando...",
+    "updating": "Atualizando..."
   },
   "language": {
     "en": "Inglês",

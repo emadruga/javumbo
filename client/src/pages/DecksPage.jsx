@@ -756,7 +756,7 @@ function DecksPage({ user, onLogout }) {
                             onClick={() => handleEditCard(card.card_id)}
                             style={{...buttonStyle, backgroundColor: '#007bff', color: 'white'}}
                           >
-                            {t('decks.edit')}
+                            {t('cards.edit')}
                           </button>
                           <button 
                             onClick={() => handleDeleteClick(card)}
