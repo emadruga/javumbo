@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api from '../api/axiosConfig.js'; // Make sure path is correct
 
 // Restore styles
@@ -24,6 +25,7 @@ const errorStyle = {
 };
 
 function LoginForm({ onLoginSuccess }) {
+  const { t } = useTranslation();
   // Restore state
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -37,7 +39,7 @@ function LoginForm({ onLoginSuccess }) {
     setLoading(true);
 
     if (!username || !password) {
-      setError('Username and password are required.');
+      setError(t('auth.errors.required'));
       setLoading(false);
       return;
     }
@@ -57,7 +59,7 @@ function LoginForm({ onLoginSuccess }) {
       if (err.response && err.response.data && err.response.data.error) {
         setError(err.response.data.error);
       } else {
-        setError('Login failed. Please check credentials or server status.');
+        setError(t('auth.errors.loginFailed'));
       }
       setLoading(false);
     }
@@ -68,9 +70,9 @@ function LoginForm({ onLoginSuccess }) {
   return (
     // Restore form elements
     <form onSubmit={handleSubmit}>
-      <h2>Login</h2>
+      <h2>{t('auth.login')}</h2>
       {error && <p style={errorStyle}>{error}</p>}
-      <label htmlFor="login-username">Username:</label>
+      <label htmlFor="login-username">{t('auth.username')}</label>
       <input
         type="text"
         id="login-username"
@@ -79,7 +81,7 @@ function LoginForm({ onLoginSuccess }) {
         required
         style={inputStyle}
       />
-      <label htmlFor="login-password">Password:</label>
+      <label htmlFor="login-password">{t('auth.password')}</label>
       <input
         type="password"
         id="login-password"
@@ -89,7 +91,7 @@ function LoginForm({ onLoginSuccess }) {
         style={inputStyle}
       />
       <button type="submit" disabled={loading} style={buttonStyle}>
-        {loading ? 'Logging in...' : 'Login'}
+        {loading ? t('auth.loggingIn') : t('auth.loginButton')}
       </button>
     </form>
   );

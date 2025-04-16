@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { getNextCard, answerCard } from '../api';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { getNextCard, answerCard } from '../api';
 import Header from './Header';
 
 function ReviewPage({ user, onLogout }) {
+  const { t } = useTranslation();
   const [card, setCard] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [startTime, setStartTime] = useState(null);
-  const [currentDeckName, setCurrentDeckName] = useState('Default');
-  const [reviewMessage, setReviewMessage] = useState('Loading card...');
+  const [currentDeckName, setCurrentDeckName] = useState('');
+  const [reviewMessage, setReviewMessage] = useState(t('common.loading'));
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -16,110 +18,124 @@ function ReviewPage({ user, onLogout }) {
     const storedDeckName = localStorage.getItem('currentDeckName');
     if (storedDeckName) {
       setCurrentDeckName(storedDeckName);
-      setReviewMessage(`Reviewing: ${storedDeckName}`);
-    } else {
-      setReviewMessage('Reviewing: Default');
+      setReviewMessage(`${t('review.reviewing')}: ${storedDeckName}`);
     }
-  }, []);
+  }, [t]);
 
   const fetchReviewData = async (isMounted) => {
     setError('');
-    setReviewMessage(prev => prev.startsWith('Reviewing:') ? prev : `Reviewing: ${currentDeckName} - Loading card...`);
+    setReviewMessage(prev => 
+      prev.startsWith(t('review.reviewing')) 
+        ? prev 
+        : `${t('review.reviewing')}: ${currentDeckName} - ${t('common.loading')}`
+    );
+
     try {
       const nextCardData = await getNextCard();
-      console.log("ReviewPage: Successfully fetched next card data:", nextCardData);
       if (!isMounted) return;
 
       if (nextCardData && nextCardData.card_id) {
         setCard(nextCardData);
         setShowAnswer(false);
         setStartTime(Date.now());
-        setReviewMessage(`Reviewing: ${currentDeckName}`);
+        setReviewMessage(`${t('review.reviewing')}: ${currentDeckName}`);
       } else {
         setCard(null);
-        setReviewMessage(nextCardData.message || `No cards due in deck: ${currentDeckName}.`);
+        setReviewMessage(nextCardData.message || t('review.noCardsMessage', { deckName: currentDeckName }));
       }
     } catch (err) {
       if (!isMounted) return;
-      console.error("ReviewPage: Error fetching review data:", err);
-      setError(err.response?.data?.error || 'Failed to load review session');
+      console.error("Error fetching review data:", err);
+      setError(err.response?.data?.error || t('review.errorLoading'));
       setCard(null);
-      setReviewMessage(`Error loading deck: ${currentDeckName}`);
+      setReviewMessage(t('review.errorLoadingDeck', { deckName: currentDeckName }));
     }
   };
 
   useEffect(() => {
     let isMounted = true;
     fetchReviewData(isMounted);
-
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentDeckName, t]);
 
   const handleAnswer = async (ease) => {
     if (!card || !startTime) return;
     const timeTaken = Date.now() - startTime;
     setError('');
-    setReviewMessage('Processing answer...');
+    setReviewMessage(t('review.processingAnswer'));
+
     try {
       await answerCard({ ease: ease, time_taken: timeTaken });
       setCard(null);
-      setReviewMessage(`Reviewing: ${currentDeckName} - Loading next card...`);
+      setReviewMessage(`${t('review.reviewing')}: ${currentDeckName} - ${t('common.loading')}`);
       let isMountedForNext = true;
       fetchReviewData(isMountedForNext);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to submit answer');
-      setReviewMessage(`Error submitting answer for deck: ${currentDeckName}`);
+      setError(err.response?.data?.error || t('review.errorSubmitting'));
+      setReviewMessage(t('review.errorSubmittingAnswer', { deckName: currentDeckName }));
     }
   };
 
-  const handleEditCard = () => {
-    if (card && card.card_id) {
-      navigate(`/edit/${card.card_id}`);
-    }
+  const handleBackToDecks = () => {
+    navigate('/decks');
   };
 
   return (
     <div className="container mt-4">
       <Header user={user} onLogout={onLogout} />
-      <h2>Review Cards</h2>
+      <div className="d-flex justify-content-between align-items-center">
+        <h2>{t('review.title')}</h2>
+        <button 
+          className="btn btn-secondary"
+          onClick={handleBackToDecks}
+        >
+          {t('review.backToDecks')}
+        </button>
+      </div>
+
       {error && <div className="alert alert-danger mt-3">{error}</div>}
-      
       {!error && reviewMessage && <p className="text-muted mt-2">{reviewMessage}</p>}
 
-      {!error && card ? (
+      {!error && card && (
         <div className="card mt-3">
           <div className="card-body">
-            <h5 className="card-title">Front</h5>
+            <h5 className="card-title">{t('cards.front')}</h5>
             <p className="card-text">{card.front}</p>
             {showAnswer && (
               <>
                 <hr />
-                <h5 className="card-title">Back</h5>
+                <h5 className="card-title">{t('cards.back')}</h5>
                 <p className="card-text">{card.back}</p>
               </>
             )}
           </div>
           <div className="card-footer">
             {showAnswer ? (
-              <>
-                <div className="d-flex justify-content-around mb-2">
-                  <button className="btn btn-danger" onClick={() => handleAnswer(1)}>Again (1)</button>
-                  <button className="btn btn-warning" onClick={() => handleAnswer(2)}>Hard (2)</button>
-                  <button className="btn btn-success" onClick={() => handleAnswer(3)}>Good (3)</button>
-                  <button className="btn btn-primary" onClick={() => handleAnswer(4)}>Easy (4)</button>
-                </div>
-              </>
+              <div className="d-flex justify-content-around mb-2">
+                <button className="btn btn-danger" onClick={() => handleAnswer(1)}>
+                  {t('review.again')} (1)
+                </button>
+                <button className="btn btn-warning" onClick={() => handleAnswer(2)}>
+                  {t('review.hard')} (2)
+                </button>
+                <button className="btn btn-success" onClick={() => handleAnswer(3)}>
+                  {t('review.good')} (3)
+                </button>
+                <button className="btn btn-primary" onClick={() => handleAnswer(4)}>
+                  {t('review.easy')} (4)
+                </button>
+              </div>
             ) : (
               <div className="d-flex justify-content-between">
-                <button className="btn btn-secondary" onClick={() => setShowAnswer(true)}>Show Answer</button>
+                <button className="btn btn-secondary" onClick={() => setShowAnswer(true)}>
+                  {t('review.showAnswer')}
+                </button>
               </div>
             )}
           </div>
         </div>
-      ) : (
-        !error && !card && !reviewMessage && <p className="mt-3">Loading...</p>
       )}
     </div>
   );

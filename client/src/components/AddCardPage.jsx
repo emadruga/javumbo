@@ -1,77 +1,106 @@
 import React, { useState, useEffect } from 'react';
-import { addCard } from '../api';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { addCard } from '../api';
 import Header from './Header';
 
 function AddCardPage({ user, onLogout }) {
+  const { t } = useTranslation();
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [currentDeckName, setCurrentDeckName] = useState('Default');
+  const [currentDeckName, setCurrentDeckName] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     const storedDeckName = localStorage.getItem('currentDeckName');
     if (storedDeckName) {
       setCurrentDeckName(storedDeckName);
+    } else {
+      navigate('/decks');
     }
-  }, []);
+  }, [navigate]);
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setError('');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setMessage('');
+    setError('');
 
     if (!front.trim() || !back.trim()) {
-      setError('Front and back cannot be empty.');
+      setError(t('cards.errorRequired'));
       return;
     }
 
     try {
-      const response = await addCard({ front, back });
-      setMessage(`Card added successfully (ID: ${response.card_id})!`);
+      await addCard({ front, back });
+      setMessage(t('cards.addSuccess'));
       setFront('');
       setBack('');
-      // Optionally navigate away or give user time to see the message
-      // setTimeout(() => navigate('/decks'), 1500); 
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to add card');
+      console.error("Error adding card:", err);
+      setError(err.response?.data?.error || t('cards.errorAdding'));
     }
+  };
+
+  const handleBackToDecks = () => {
+    navigate('/decks');
   };
 
   return (
     <div className="container mt-4">
       <Header user={user} onLogout={onLogout} />
-      <h2>Add New Card</h2>
-      {message && <div className="alert alert-success">{message}</div>}
-      {error && <div className="alert alert-danger">{error}</div>}
-      <form onSubmit={handleSubmit}>
+      <div className="d-flex justify-content-between align-items-center">
+        <h2>{t('cards.addTo')} {currentDeckName}</h2>
+        <button 
+          className="btn btn-secondary"
+          onClick={handleBackToDecks}
+        >
+          {t('common.back')}
+        </button>
+      </div>
+
+      {message && <div className="alert alert-success mt-3">{message}</div>}
+      {error && <div className="alert alert-danger mt-3">{error}</div>}
+
+      <form onSubmit={handleSubmit} className="mt-4">
         <div className="mb-3">
-          <label htmlFor="front" className="form-label">Front</label>
+          <label htmlFor="front" className="form-label">{t('cards.front')}</label>
           <textarea
             id="front"
             className="form-control"
-            rows="3"
             value={front}
             onChange={(e) => setFront(e.target.value)}
-            required
+            rows="3"
+            placeholder={t('cards.frontPlaceholder')}
           />
         </div>
+
         <div className="mb-3">
-          <label htmlFor="back" className="form-label">Back</label>
+          <label htmlFor="back" className="form-label">{t('cards.back')}</label>
           <textarea
             id="back"
             className="form-control"
-            rows="3"
             value={back}
             onChange={(e) => setBack(e.target.value)}
-            required
+            rows="3"
+            placeholder={t('cards.backPlaceholder')}
           />
         </div>
-        <button type="submit" className="btn btn-primary">Add Card</button>
+
+        <div className="d-flex justify-content-between">
+          <button type="submit" className="btn btn-primary">
+            {t('cards.add')}
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-secondary" 
+            onClick={handleBackToDecks}
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
       </form>
-      <p className="mt-3 text-muted">Adding to deck: <strong>{currentDeckName}</strong></p>
     </div>
   );
 }

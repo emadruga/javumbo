@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api from '../api/axiosConfig';
 
 const inputStyle = {
@@ -25,6 +26,7 @@ const errorStyle = {
 };
 
 function RegisterForm({ onRegisterSuccess }) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -34,27 +36,27 @@ function RegisterForm({ onRegisterSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Clear previous errors
+    setError('');
 
     // Basic frontend validation
     if (!username || !name || !password || !confirmPassword) {
-      setError('All fields are required.');
+      setError(t('auth.errors.required'));
       return;
     }
     if (username.length > 10) {
-        setError('Username cannot exceed 10 characters.');
-        return;
+      setError(t('auth.errors.usernameLength', { max: 10 }));
+      return;
     }
     if (name.length > 40) {
-        setError('Name cannot exceed 40 characters.');
-        return;
+      setError(t('auth.errors.nameLength', { max: 40 }));
+      return;
     }
     if (password.length < 10 || password.length > 20) {
-      setError('Password must be between 10 and 20 characters.');
+      setError(t('auth.errors.passwordLength', { min: 10, max: 20 }));
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError(t('auth.errors.passwordMatch'));
       return;
     }
 
@@ -66,9 +68,9 @@ function RegisterForm({ onRegisterSuccess }) {
         password,
       });
       console.log('Registration successful:', response.data);
-      alert('Registration successful! Please log in.'); // Give feedback
+      alert(t('auth.successRegister'));
       if (onRegisterSuccess) {
-        onRegisterSuccess(); // Callback to switch tab
+        onRegisterSuccess();
       }
       // Clear form
       setUsername('');
@@ -81,7 +83,7 @@ function RegisterForm({ onRegisterSuccess }) {
       if (err.response && err.response.data && err.response.data.error) {
         setError(err.response.data.error);
       } else {
-        setError('Registration failed. Please try again.');
+        setError(t('auth.errors.registerFailed'));
       }
     } finally {
       setLoading(false);
@@ -90,9 +92,9 @@ function RegisterForm({ onRegisterSuccess }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <h2>Register</h2>
+      <h2>{t('auth.register')}</h2>
       {error && <p style={errorStyle}>{error}</p>}
-      <label htmlFor="reg-username">Username (max 10 chars):</label>
+      <label htmlFor="reg-username">{t('auth.usernameWithLimit', { max: 10 })}</label>
       <input
         type="text"
         id="reg-username"
@@ -102,7 +104,7 @@ function RegisterForm({ onRegisterSuccess }) {
         required
         style={inputStyle}
       />
-      <label htmlFor="reg-name">Name (max 40 chars):</label>
+      <label htmlFor="reg-name">{t('auth.nameWithLimit', { max: 40 })}</label>
       <input
         type="text"
         id="reg-name"
@@ -112,7 +114,7 @@ function RegisterForm({ onRegisterSuccess }) {
         required
         style={inputStyle}
       />
-      <label htmlFor="reg-password">Password (10-20 chars):</label>
+      <label htmlFor="reg-password">{t('auth.passwordWithLimit', { min: 10, max: 20 })}</label>
       <input
         type="password"
         id="reg-password"
@@ -123,7 +125,7 @@ function RegisterForm({ onRegisterSuccess }) {
         required
         style={inputStyle}
       />
-      <label htmlFor="reg-confirm-password">Confirm Password:</label>
+      <label htmlFor="reg-confirm-password">{t('auth.confirmPassword')}</label>
       <input
         type="password"
         id="reg-confirm-password"
@@ -133,7 +135,7 @@ function RegisterForm({ onRegisterSuccess }) {
         style={inputStyle}
       />
       <button type="submit" disabled={loading} style={buttonStyle}>
-        {loading ? 'Registering...' : 'Register'}
+        {loading ? t('auth.registering') : t('auth.registerButton')}
       </button>
     </form>
   );
