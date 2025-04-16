@@ -1,11 +1,11 @@
 import React, { useState/* , useEffect */ } from 'react'; // Comment out useEffect
 import { Routes, Route, useNavigate/* , useLocation */ } from 'react-router-dom'; // Comment out useLocation
 import AuthPage from './pages/AuthPage.jsx';
-import ReviewPage from './components/ReviewPage.jsx'; // Uncomment
-import AddCardPage from './components/AddCardPage.jsx'; // Uncomment
-import DecksPage from './pages/DecksPage.jsx'; // Uncomment
-import DeckStatisticsPage from './components/DeckStatisticsPage.jsx'; // Import the new page
-import EditCardPage from './pages/EditCardPage.jsx'; // Import EditCardPage
+import ReviewPage from './pages/ReviewPage.jsx';
+import AddCardPage from './pages/AddCardPage.jsx';
+import DecksPage from './pages/DecksPage.jsx';
+import DeckStatisticsPage from './pages/DeckStatisticsPage.jsx';
+import EditCardPage from './pages/EditCardPage.jsx';
 import api from './api/axiosConfig.js'; // Import configured Axios instance
 
 function App() {

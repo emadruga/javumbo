@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { addCard } from '../api';
-import Header from './Header';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { addCard } from "../api";
+import Header from "../components/Header";
 
 function AddCardPage({ user, onLogout }) {
   const { t } = useTranslation();
