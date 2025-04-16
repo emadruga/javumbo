@@ -18,6 +18,10 @@
     "usernameWithLimit": "Username (max {{max}} chars):",
     "nameWithLimit": "Name (max {{max}} chars):",
     "passwordWithLimit": "Password ({{min}}-{{max}} chars):",
+    "usernamePlaceholder": "Enter your username",
+    "passwordPlaceholder": "Enter your password",
+    "namePlaceholder": "Enter your name",
+    "confirmPasswordPlaceholder": "Confirm your password",
     "errors": {
       "required": "All fields are required.",
       "passwordMatch": "Passwords do not match",
@@ -57,7 +61,14 @@
     "rename": "Rename",
     "front": "Front",
     "back": "Back",
-    "page": "Page {{currentPage}} of {{totalPages}}"
+    "page": "Page {{currentPage}} of {{totalPages}}",
+    "deckNamePlaceholder": "Enter deck name",
+    "enterNewName": "Enter new name",
+    "currentName": "Current Name",
+    "renameDeck": "Rename Deck",
+    "confirmDeleteCard": "Are you sure you want to delete this card?",
+    "deleteCard": "Delete Card",
+    "noCards": "No cards in this deck yet."
   },
   "cards": {
     "front": "Front",
@@ -112,7 +123,15 @@
     "back": "Back",
     "welcome": "Welcome, {{name}}!",
     "toggleNav": "Toggle navigation",
-    "exporting": "Exporting..."
+    "exporting": "Exporting...",
+    "first": "First",
+    "prev": "Previous",
+    "next": "Next",
+    "last": "Last",
+    "deleteCard": "Delete Card",
+    "deleteDeck": "Delete Deck",
+    "deleting": "Deleting...",
+    "renaming": "Renaming..."
   },
   "language": {
     "en": "English",

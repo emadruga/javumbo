@@ -103,6 +103,8 @@ function RegisterForm({ onRegisterSuccess }) {
         maxLength="10"
         required
         style={inputStyle}
+        placeholder={t('auth.usernamePlaceholder')}
+        title={t('auth.errors.required')}
       />
       <label htmlFor="reg-name">{t('auth.nameWithLimit', { max: 40 })}</label>
       <input
@@ -113,6 +115,8 @@ function RegisterForm({ onRegisterSuccess }) {
         maxLength="40"
         required
         style={inputStyle}
+        placeholder={t('auth.namePlaceholder')}
+        title={t('auth.errors.required')}
       />
       <label htmlFor="reg-password">{t('auth.passwordWithLimit', { min: 10, max: 20 })}</label>
       <input
@@ -124,6 +128,8 @@ function RegisterForm({ onRegisterSuccess }) {
         maxLength="20"
         required
         style={inputStyle}
+        placeholder={t('auth.passwordPlaceholder')}
+        title={t('auth.errors.required')}
       />
       <label htmlFor="reg-confirm-password">{t('auth.confirmPassword')}</label>
       <input
@@ -133,6 +139,8 @@ function RegisterForm({ onRegisterSuccess }) {
         onChange={(e) => setConfirmPassword(e.target.value)}
         required
         style={inputStyle}
+        placeholder={t('auth.confirmPasswordPlaceholder')}
+        title={t('auth.errors.required')}
       />
       <button type="submit" disabled={loading} style={buttonStyle}>
         {loading ? t('auth.registering') : t('auth.registerButton')}

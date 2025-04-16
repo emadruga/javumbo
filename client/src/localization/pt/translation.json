@@ -18,6 +18,10 @@
     "usernameWithLimit": "Usuário (máx {{max}} caracteres):",
     "nameWithLimit": "Nome (máx {{max}} caracteres):",
     "passwordWithLimit": "Senha ({{min}}-{{max}} caracteres):",
+    "usernamePlaceholder": "Digite seu usuário",
+    "passwordPlaceholder": "Digite sua senha",
+    "namePlaceholder": "Digite seu nome",
+    "confirmPasswordPlaceholder": "Confirme sua senha",
     "errors": {
       "required": "Todos os campos são obrigatórios.",
       "passwordMatch": "As senhas não coincidem",
@@ -57,7 +61,14 @@
     "rename": "Renomear",
     "front": "Frente",
     "back": "Verso",
-    "page": "Página {{currentPage}} de {{totalPages}}"
+    "page": "Página {{currentPage}} de {{totalPages}}",
+    "deckNamePlaceholder": "Digite o nome do baralho",
+    "enterNewName": "Digite o novo nome",
+    "currentName": "Nome Atual",
+    "renameDeck": "Renomear Baralho",
+    "confirmDeleteCard": "Tem certeza que deseja excluir este cartão?",
+    "deleteCard": "Excluir Cartão",
+    "noCards": "Ainda não há cartões neste baralho."
   },
   "cards": {
     "front": "Frente",
@@ -118,7 +129,15 @@
     "welcome": "Bem-vindo, {{name}}!",
     "toggleNav": "Alternar navegação",
     "exporting": "Exportando...",
-    "updating": "Atualizando..."
+    "updating": "Atualizando...",
+    "first": "Primeira",
+    "prev": "Anterior",
+    "next": "Próxima",
+    "last": "Última",
+    "deleteCard": "Excluir Cartão",
+    "deleteDeck": "Excluir Baralho",
+    "deleting": "Excluindo...",
+    "renaming": "Renomeando..."
   },
   "language": {
     "en": "Inglês",

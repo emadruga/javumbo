@@ -710,9 +710,10 @@ function DecksPage({ user, onLogout }) {
                 type="text"
                 value={newDeckName}
                 onChange={(e) => setNewDeckName(e.target.value)}
-                placeholder={t('decks.deckName')}
+                placeholder={t('decks.deckNamePlaceholder')}
                 style={inputStyle}
                 required
+                title={t('decks.errorNameRequired')}
             />
             <button type="submit" disabled={isCreating} style={createButtonStyle}>
                 {isCreating ? t('common.loading') : t('decks.createButton')}

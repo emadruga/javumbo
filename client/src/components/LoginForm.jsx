@@ -80,6 +80,8 @@ function LoginForm({ onLoginSuccess }) {
         onChange={(e) => setUsername(e.target.value)}
         required
         style={inputStyle}
+        placeholder={t('auth.usernamePlaceholder')}
+        title={t('auth.errors.required')}
       />
       <label htmlFor="login-password">{t('auth.password')}</label>
       <input
@@ -89,6 +91,8 @@ function LoginForm({ onLoginSuccess }) {
         onChange={(e) => setPassword(e.target.value)}
         required
         style={inputStyle}
+        placeholder={t('auth.passwordPlaceholder')}
+        title={t('auth.errors.required')}
       />
       <button type="submit" disabled={loading} style={buttonStyle}>
         {loading ? t('auth.loggingIn') : t('auth.loginButton')}

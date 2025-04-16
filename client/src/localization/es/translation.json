@@ -18,6 +18,10 @@
     "usernameWithLimit": "Usuario (máx {{max}} caracteres):",
     "nameWithLimit": "Nombre (máx {{max}} caracteres):",
     "passwordWithLimit": "Contraseña ({{min}}-{{max}} caracteres):",
+    "usernamePlaceholder": "Ingresa tu usuario",
+    "passwordPlaceholder": "Ingresa tu contraseña",
+    "namePlaceholder": "Ingresa tu nombre",
+    "confirmPasswordPlaceholder": "Confirma tu contraseña",
     "errors": {
       "required": "Todos los campos son obligatorios.",
       "passwordMatch": "Las contraseñas no coinciden",
@@ -57,7 +61,14 @@
     "rename": "Renombrar",
     "front": "Anverso",
     "back": "Reverso",
-    "page": "Página {{currentPage}} de {{totalPages}}"
+    "page": "Página {{currentPage}} de {{totalPages}}",
+    "deckNamePlaceholder": "Ingresa el nombre del mazo",
+    "enterNewName": "Ingresa el nuevo nombre",
+    "currentName": "Nombre Actual",
+    "renameDeck": "Renombrar Mazo",
+    "confirmDeleteCard": "¿Estás seguro de que deseas eliminar esta tarjeta?",
+    "deleteCard": "Eliminar Tarjeta",
+    "noCards": "Aún no hay tarjetas en este mazo."
   },
   "cards": {
     "front": "Anverso",
@@ -118,7 +129,15 @@
     "welcome": "¡Bienvenido, {{name}}!",
     "toggleNav": "Alternar navegación",
     "exporting": "Exportando...",
-    "updating": "Actualizando..."
+    "updating": "Actualizando...",
+    "first": "Primera",
+    "prev": "Anterior",
+    "next": "Siguiente",
+    "last": "Última",
+    "deleteCard": "Eliminar Tarjeta",
+    "deleteDeck": "Eliminar Mazo",
+    "deleting": "Eliminando...",
+    "renaming": "Renombrando..."
   },
   "language": {
     "en": "Inglés",
