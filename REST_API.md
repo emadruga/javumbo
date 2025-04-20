@@ -43,7 +43,7 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
         ```json
         {
           "message": "User registered successfully",
-          "user_id": integer
+          "userId": integer
         }
         ```
 *   **Error Responses:**
@@ -70,7 +70,7 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
         {
           "message": "Login successful",
           "user": {
-            "user_id": integer,
+            "userId": integer,
             "username": "string",
             "name": "string"
           }
@@ -110,13 +110,13 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
     *   Body:
         ```json
         {
-          "card_id": integer,
+          "cardId": integer,
           "front": "string",
           "back": "string",
           "queue": integer
         }
         ```
-    *   *Side Effect:* Stores `current_card_id` and `current_note_id` in the server-side session.
+    *   *Side Effect:* Stores `currentCardId` and `currentNoteId` in the server-side session.
 *   **Success Response (No Card Due / Available):**
     *   Code: `200 OK`
     *   Body:
@@ -125,7 +125,7 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
           "message": "string (e.g., 'No cards due for deck X right now.', 'No cards available for review in deck X.')"
         }
         ```
-    *   *Side Effect:* Clears `current_card_id` and `current_note_id` from the server-side session.
+    *   *Side Effect:* Clears `currentCardId` and `currentNoteId` from the server-side session.
 *   **Error Responses:**
     *   `401 Unauthorized`: (See Authentication section).
     *   `404 Not Found`: User's database file does not exist (e.g., `{"error": "User database not found. Please re-register or contact support."}`).
@@ -140,7 +140,7 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
     ```json
     {
       "ease": integer (1=Again, 2=Hard, 3=Good, 4=Easy),
-      "time_taken": integer (milliseconds spent viewing card)
+      "timeTaken": integer (milliseconds spent viewing card)
     }
     ```
 *   **Success Response:**
@@ -151,11 +151,11 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
           "message": "Answer processed successfully"
         }
         ```
-    *   *Side Effect:* Clears `current_card_id` and `current_note_id` from the server-side session.
+    *   *Side Effect:* Clears `currentCardId` and `currentNoteId` from the server-side session.
 *   **Error Responses:**
-    *   `400 Bad Request`: Missing/invalid ease rating, or `current_card_id` missing from session (e.g., `{"error": "Invalid ease rating (must be 1, 2, 3, or 4)"}`, `{"error": "Missing card information in session or invalid request..."}`).
+    *   `400 Bad Request`: Missing/invalid ease rating, or `currentCardId` missing from session (e.g., `{"error": "Invalid ease rating (must be 1, 2, 3, or 4)"}`, `{"error": "Missing card information in session or invalid request..."}`).
     *   `401 Unauthorized`: (See Authentication section).
-    *   `404 Not Found`: The `current_card_id` from the session doesn't exist in the database (e.g., `{"error": "Card not found"}`).
+    *   `404 Not Found`: The `currentCardId` from the session doesn't exist in the database (e.g., `{"error": "Card not found"}`).
     *   `500 Internal Server Error`: Database error during card update or logging (e.g., `{"error": "Database error occurred during review update"}`).
 
 ### 7. Export Collection
@@ -192,8 +192,8 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
         ```json
         {
           "message": "Card added successfully",
-          "note_id": integer,
-          "card_id": integer
+          "noteId": integer,
+          "cardId": integer
         }
         ```
 *   **Error Responses:**
@@ -274,11 +274,11 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
 
 ### 12. Get Deck Statistics
 
-*   **Endpoint:** `GET /decks/<int:deck_id>/stats`
+*   **Endpoint:** `GET /decks/<int:deckId>/stats`
 *   **Description:** Retrieves the current count of cards in various review states (New, Learning, Relearning, Young, Mature, Suspended, Buried) for a specific deck.
 *   **Authentication Required:** Yes
 *   **Path Parameters:**
-    *   `deck_id` (integer): The ID of the deck for which to retrieve statistics.
+    *   `deckId` (integer): The ID of the deck for which to retrieve statistics.
 *   **Query Parameters:** None (The `timeframe` parameter is currently ignored by the backend).
 *   **Request Body:** None
 *   **Success Response:**
@@ -301,23 +301,23 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
         *(Where `total` represents the sum of all counts returned in the `counts` object).*
 *   **Error Responses:**
     *   `401 Unauthorized`: (See Authentication section).
-    *   `404 Not Found`: The specified `deck_id` does not exist or does not belong to the user (e.g., `{"error": "Deck not found or access denied."}`).
+    *   `404 Not Found`: The specified `deckId` does not exist or does not belong to the user (e.g., `{"error": "Deck not found or access denied."}`).
     *   `500 Internal Server Error`: Database error reading collection or card data (e.g., `{"error": "Collection data not found."}`, `{"error": "Database error occurred while fetching statistics."}`).
 
 ### 13. Get Card Details
 
-*   **Endpoint:** `GET /cards/<card_id>`
+*   **Endpoint:** `GET /cards/<cardId>`
 *   **Description:** Retrieves the details of a specific card.
 *   **Authentication Required:** Yes
 *   **Path Parameters:**
-    *   `card_id` (integer): The ID of the card to retrieve.
+    *   `cardId` (integer): The ID of the card to retrieve.
 *   **Request Body:** None
 *   **Success Response:**
     *   Code: `200 OK`
     *   Body:
         ```json
         {
-          "card_id": integer,
+          "cardId": integer,
           "front": "string",
           "back": "string"
         }
@@ -329,11 +329,11 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
 
 ### 14. Update Card
 
-*   **Endpoint:** `PUT /cards/<card_id>`
+*   **Endpoint:** `PUT /cards/<cardId>`
 *   **Description:** Updates the content of a specific flashcard.
 *   **Authentication Required:** Yes
 *   **Path Parameters:**
-    *   `card_id` (integer): The ID of the card to update.
+    *   `cardId` (integer): The ID of the card to update.
 *   **Request Body:**
     ```json
     {
@@ -358,26 +358,26 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
 
 ### 15. Get Deck Cards
 
-*   **Endpoint:** `GET /decks/<deck_id>/cards`
+*   **Endpoint:** `GET /decks/<deckId>/cards`
 *   **Description:** Retrieves a paginated list of cards in a specific deck.
 *   **Authentication Required:** Yes
 *   **Path Parameters:**
-    *   `deck_id` (integer): The ID of the deck for which to retrieve cards.
+    *   `deckId` (integer): The ID of the deck for which to retrieve cards.
 *   **Query Parameters:**
     *   `page` (integer, optional): The page number of results to return. Default: 1.
-    *   `per_page` (integer, optional): The number of cards per page. Default: 10.
+    *   `perPage` (integer, optional): The number of cards per page. Default: 10.
 *   **Request Body:** None
 *   **Success Response:**
     *   Code: `200 OK`
     *   Body:
         ```json
         {
-          "deck_id": "string",
-          "deck_name": "string",
+          "deckId": "string",
+          "deckName": "string",
           "cards": [
             {
-              "card_id": integer,
-              "note_id": integer,
+              "cardId": integer,
+              "noteId": integer,
               "front": "string",
               "back": "string",
               "modified": integer
@@ -387,8 +387,8 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
           "pagination": {
             "total": integer,
             "page": integer,
-            "per_page": integer,
-            "total_pages": integer
+            "perPage": integer,
+            "totalPages": integer
           }
         }
         ```
@@ -399,11 +399,11 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
 
 ### 16. Delete Card
 
-*   **Endpoint:** `DELETE /cards/<card_id>`
+*   **Endpoint:** `DELETE /cards/<cardId>`
 *   **Description:** Deletes a specific flashcard.
 *   **Authentication Required:** Yes
 *   **Path Parameters:**
-    *   `card_id` (integer): The ID of the card to delete.
+    *   `cardId` (integer): The ID of the card to delete.
 *   **Request Body:** None
 *   **Success Response:**
     *   Code: `200 OK`
@@ -421,11 +421,11 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
 
 ### 17. Delete Deck
 
-*   **Endpoint:** `DELETE /decks/<int:deck_id>`
+*   **Endpoint:** `DELETE /decks/<int:deckId>`
 *   **Description:** Deletes a specific deck and all its cards.
 *   **Authentication Required:** Yes
 *   **Path Parameters:**
-    *   `deck_id` (integer): The ID of the deck to delete.
+    *   `deckId` (integer): The ID of the deck to delete.
 *   **Request Body:** None
 *   **Success Response:**
     *   Code: `200 OK`
@@ -442,11 +442,11 @@ Routes marked with `Authentication Required: Yes` require the user to be logged 
 
 ### 18. Rename Deck
 
-*   **Endpoint:** `PUT /decks/<int:deck_id>/rename`
+*   **Endpoint:** `PUT /decks/<int:deckId>/rename`
 *   **Description:** Renames a specific deck.
 *   **Authentication Required:** Yes
 *   **Path Parameters:**
-    *   `deck_id` (integer): The ID of the deck to rename.
+    *   `deckId` (integer): The ID of the deck to rename.
 *   **Request Body:**
     ```json
     {

@@ -252,102 +252,121 @@ def index():
 # TODO: Implement Authentication routes (/register, /login, /logout)
 @app.route('/register', methods=['POST'])
 def register():
+    """Registers a new user."""
     data = request.get_json()
-    username = data.get('username')
-    name = data.get('name')
-    password = data.get('password')
-
-    if not all([username, name, password]):
+    
+    if not data or not all(k in data for k in ('username', 'name', 'password')):
         return jsonify({"error": "Missing required fields"}), 400
-
-    # Validate input lengths
-    if not (len(username) <= 10 and username):
+    
+    username = data['username'].strip()
+    name = data['name'].strip()
+    password = data['password']
+    
+    # Validate username and password length
+    if len(username) < 1 or len(username) > 10:
         return jsonify({"error": "Username must be between 1 and 10 characters"}), 400
-    if not (len(name) <= 40 and name):
+    
+    if len(name) < 1 or len(name) > 40:
         return jsonify({"error": "Name must be between 1 and 40 characters"}), 400
-    if not (10 <= len(password) <= 20):
+    
+    if len(password) < 10 or len(password) > 20:
         return jsonify({"error": "Password must be between 10 and 20 characters"}), 400
-
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-    admin_conn = None
-    try:
-        admin_conn = sqlite3.connect(ADMIN_DB_PATH)
-        admin_cursor = admin_conn.cursor()
-        admin_cursor.execute("INSERT INTO users (username, name, password_hash) VALUES (?, ?, ?)",
-                       (username, name, hashed_password.decode('utf-8')))
-        admin_conn.commit()
-        user_id = admin_cursor.lastrowid # Get the newly inserted user ID
-        app.logger.info(f"User '{username}' registered successfully with ID: {user_id}") # Use logger
-
-        # --- Create User-Specific Anki DB --- ##
-        user_db_path = get_user_db_path(user_id)
-        try:
-            init_anki_db(user_db_path, name)
-            # --- Add Initial Flashcards --- ##
-            temp_model_id = "1700000000001"
-            add_initial_flashcards(user_db_path, temp_model_id)
-            app.logger.info(f"Added initial flashcards for user {user_id}") # Use logger
-        except Exception as db_err:
-            app.logger.error(f"Failed to initialize Anki DB or add initial cards for user {user_id}: {db_err}") # Use logger
-            return jsonify({"error": "Server error during user setup after registration."}), 500
-        # --- ---
-
-        return jsonify({"message": "User registered successfully", "user_id": user_id}), 201
-
-    except sqlite3.IntegrityError: # Handles UNIQUE constraint violation for username
+    
+    # Hash the password
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    # Initialize admin database if it doesn't exist yet
+    init_admin_db()
+    
+    # Check if username already exists
+    conn = sqlite3.connect(ADMIN_DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+    if cursor.fetchone():
+        conn.close()
         return jsonify({"error": "Username already exists"}), 409
+    
+    # Insert the new user
+    try:
+        cursor.execute(
+            "INSERT INTO users (username, name, password_hash) VALUES (?, ?, ?)",
+            (username, name, password_hash)
+        )
+        conn.commit()
+        user_id = cursor.lastrowid
+        conn.close()
+        
+        app.logger.info(f"User registered: {username} (ID: {user_id})")
+        
+        # Create user flashcard database
+        user_db_path = get_user_db_path(user_id)
+        init_anki_db(user_db_path, user_name=name)
+        add_initial_flashcards(user_db_path, "1700000000001")  # Using fixed model ID from init
+        
+        return jsonify({
+            "message": "User registered successfully",
+            "userId": user_id
+        }), 201
     except Exception as e:
-        app.logger.error(f"Error during registration: {e}") # Use logger
+        conn.rollback()
+        conn.close()
+        app.logger.exception(f"Error during registration: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
-    finally:
-        if admin_conn:
-            admin_conn.close()
 
 @app.route('/login', methods=['POST'])
 def login():
+    """Authenticates a user and creates a session."""
     data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-
-    if not username or not password:
+    
+    if not data or 'username' not in data or 'password' not in data:
         return jsonify({"error": "Username and password are required"}), 400
-
-    conn = None
+    
+    username = data['username']
+    password = data['password']
+    
+    # Initialize admin database if it doesn't exist yet
+    init_admin_db()
+    
     try:
         conn = sqlite3.connect(ADMIN_DB_PATH)
-        conn.row_factory = sqlite3.Row # Return rows as dictionary-like objects
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT user_id, name, password_hash FROM users WHERE username = ?", (username,))
+        
+        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
         user = cursor.fetchone()
-
-        if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-            # Password matches, create session
+        conn.close()
+        
+        if not user:
+            return jsonify({"error": "Invalid username or password"}), 401
+        
+        # Verify password
+        if bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            # Create session
             session['user_id'] = user['user_id']
-            session['username'] = username
-            session['name'] = user['name']
-            app.logger.info(f"User '{username}' logged in successfully.") # Use logger
+            session['username'] = user['username']
+            
+            app.logger.info(f"User logged in: {username} (ID: {user['user_id']})")
+            
             return jsonify({
                 "message": "Login successful",
-                "user": {"user_id": user['user_id'], "username": username, "name": user['name']}
+                "user": {
+                    "userId": user['user_id'],
+                    "username": user['username'],
+                    "name": user['name']
+                }
             }), 200
         else:
-            # Invalid credentials
             return jsonify({"error": "Invalid username or password"}), 401
-
     except Exception as e:
-        app.logger.error(f"Error during login: {e}") # Use logger
+        app.logger.exception(f"Error during login: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
-    finally:
-        if conn:
-            conn.close()
 
 @app.route('/logout', methods=['POST'])
 def logout():
     # Clear the user session
     session.pop('user_id', None)
     session.pop('username', None)
-    session.pop('name', None)
+    # Remove the name variable from session since we don't store it anymore
     app.logger.info("User logged out.") # Use logger
     return jsonify({"message": "Logout successful"}), 200
 
@@ -1162,355 +1181,351 @@ def login_required(f):
 @app.route('/review', methods=['GET'])
 @login_required
 def get_next_card():
-    app.logger.debug(">>> Entering /review endpoint") # Use logger (DEBUG)
+    """Fetches the next card due for review"""
     user_id = session['user_id']
     user_db_path = get_user_db_path(user_id)
-    conn = None
-
+    
+    # Check if user's database exists
     if not os.path.exists(user_db_path):
+        app.logger.error(f"User database not found for user {user_id}")
         return jsonify({"error": "User database not found. Please re-register or contact support."}), 404
-
+    
+    conn = None
     try:
-        app.logger.debug("--> Attempting to connect to DB...") # Use logger (DEBUG)
         conn = sqlite3.connect(user_db_path)
-        app.logger.debug("--> DB Connection successful.") # Use logger (DEBUG)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        app.logger.debug("--> Cursor created.") # Use logger (DEBUG)
-
-        app.logger.debug("--> Executing query for conf, crt...") # Use logger (DEBUG)
-        cursor.execute("SELECT conf, crt FROM col LIMIT 1")
-        app.logger.debug("--> Query for conf, crt executed.") # Use logger (DEBUG)
-        col_data = cursor.fetchone()
-        app.logger.debug(f"--> Fetched col_data: {col_data}") # Use logger (DEBUG)
-
-        conf_value = None
-        crt_value = None
-
-        if col_data:
-            try:
-                conf_value = col_data['conf']
-                app.logger.debug(f"--> Checking conf: Value exists") # Simplified log
-            except Exception as e:
-                app.logger.error(f"Accessing col_data['conf']: {e}") # Use logger
-            try:
-                crt_value = col_data['crt']
-                app.logger.debug(f"--> Checking crt: Value exists") # Simplified log
-            except Exception as e:
-                app.logger.error(f"Accessing col_data['crt']: {e}") # Use logger
-        else:
-            app.logger.error("col_data is None") # Use logger
-
-        if not col_data or conf_value is None or crt_value is None:
-             app.logger.error("Condition failed (col_data is None, or conf_value is None, or crt_value is None)") # Use logger
-             return jsonify({"error": "Collection configuration or creation time could not be read"}), 500
         
-        app.logger.debug("--> Parsing conf JSON...") # Use logger (DEBUG)
-        conf_dict = json.loads(conf_value) 
-        app.logger.debug("--> Parsed conf JSON.") # Use logger (DEBUG)
-        crt_time_sec = crt_value 
-        current_deck_id = conf_dict.get('curDeck', 1)
-        app.logger.debug(f"--> Current Deck ID: {current_deck_id}, Crt Time: {crt_time_sec}") # Use logger (DEBUG)
+        # Get the collection creation time and current deck ID
+        cursor.execute("SELECT crt, conf FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        if not col_data:
+            return jsonify({"error": "Collection configuration or creation time could not be read"}), 500
+        
+        conf_dict = json.loads(col_data['conf'])
+        current_deck_id = conf_dict.get('curDeck', 1)  # Default to deck ID 1 if not set
 
-        current_time_sec = int(time.time())
-        days_passed = (current_time_sec - crt_time_sec) // 86400
-        app.logger.debug(f"--> Calculated days_passed: {days_passed}") # Use logger (DEBUG)
-
-        app.logger.debug("--> Executing query for next card...") # Use logger (DEBUG)
-        cursor.execute(f"""
-            SELECT c.id as card_id, c.nid, c.due, c.queue, n.flds
+        # Get current deck name
+        cursor.execute("SELECT decks FROM col")
+        decks_data = cursor.fetchone()
+        decks_dict = json.loads(decks_data['decks'])
+        deck_name = decks_dict.get(str(current_deck_id), {}).get('name', 'Default')
+        
+        # Calculate current day based on collection creation time
+        now = int(time.time())
+        day_cut_off = (now - col_data['crt']) // 86400  # Days since collection creation
+        
+        # Query for the next card to review from the current deck
+        # This simplified query follows Anki's general approach:
+        # 1. Get cards in learning mode (queue=1)
+        # 2. Get cards in review that are due (queue=2, due ≤ day_cut_off)
+        # 3. Get new cards (queue=0)
+        
+        cursor.execute("""
+            SELECT c.id, c.nid, c.queue, n.flds
             FROM cards c
             JOIN notes n ON c.nid = n.id
-            WHERE c.queue >= 0 AND c.did = ?
-            ORDER BY CASE c.queue WHEN 0 THEN 0 WHEN 1 THEN 1 WHEN 3 THEN 1 WHEN 2 THEN 2 ELSE 3 END, c.due ASC
+            WHERE c.did = ? AND c.queue >= 0 AND c.queue <= 3
+            ORDER BY 
+                CASE 
+                    WHEN c.queue = 1 THEN 0  -- Learning cards first
+                    WHEN c.queue = 3 THEN 0  -- Also learning (relearning)
+                    WHEN c.queue = 2 AND c.due <= ? THEN 1  -- Due review cards next
+                    WHEN c.queue = 0 THEN 2  -- New cards last
+                    ELSE 3  -- Everything else (shouldn't hit this)
+                END,
+                CASE 
+                    WHEN c.queue = 1 OR c.queue = 3 THEN c.due  -- Sort learning by due time
+                    WHEN c.queue = 2 THEN c.due  -- Sort review by due date
+                    ELSE c.id  -- Sort new cards by ID
+                END
             LIMIT 1
-        """, (current_deck_id,))
-        app.logger.debug("--> Query for next card executed.") # Use logger (DEBUG)
-        card_to_review = cursor.fetchone()
-        app.logger.debug(f"--> Fetched card_to_review: {card_to_review}") # Use logger (DEBUG)
-
-        if card_to_review:
-            queue = card_to_review['queue']
-            due = card_to_review['due']
-
-            is_due = False
-            if queue == 0:
-                is_due = True
-            elif queue == 1 or queue == 3:
-                if due <= current_time_sec:
-                    is_due = True
-            elif queue == 2:
-                 if due <= days_passed:
-                     is_due = True
-
-            if is_due:
-                fields = card_to_review['flds'].split('\x1f')
-                front = fields[0]
-                back = fields[1]
-                session['current_card_id'] = card_to_review['card_id']
-                session['current_note_id'] = card_to_review['nid']
-                app.logger.info(f"Presenting card ID {card_to_review['card_id']} for user {user_id}") # INFO level might be better
-                return jsonify({
-                    "card_id": card_to_review['card_id'],
-                    "front": front,
-                    "back": back,
-                    "queue": queue
-                }), 200
-            else:
-                session.pop('current_card_id', None)
-                session.pop('current_note_id', None)
-                app.logger.debug(f"Card {card_to_review['card_id']} selected but not due yet") # Use logger (DEBUG)
-                return jsonify({"message": f"No cards due for deck {current_deck_id} right now."}), 200
+        """, (current_deck_id, day_cut_off))
+        
+        card = cursor.fetchone()
+        
+        if card:
+            # Split the fields string to get front and back
+            fields = card['flds'].split('\x1f')  # Anki separator
+            front = fields[0]
+            back = fields[1] if len(fields) > 1 else ""
+            
+            # Store the current card ID in the session for the answer endpoint
+            session['currentCardId'] = card['id']
+            session['currentNoteId'] = card['nid']
+            
+            return jsonify({
+                "cardId": card['id'],
+                "front": front,
+                "back": back,
+                "queue": card['queue']
+            }), 200
         else:
-            session.pop('current_card_id', None)
-            session.pop('current_note_id', None)
-            app.logger.info(f"No cards available for review in deck {current_deck_id} for user {user_id}.") # INFO level
-            return jsonify({"message": f"No cards available for review in deck {current_deck_id}."}), 200
-
-    except sqlite3.Error as db_err:
-        app.logger.error(f"Database error fetching review card: {db_err}") # Use logger
-        return jsonify({"error": f"Database error occurred: {db_err}"}), 500
+            # Clear any card in session if no card found
+            session.pop('currentCardId', None)
+            session.pop('currentNoteId', None)
+            
+            # Check if there are any cards at all in this deck
+            cursor.execute("SELECT COUNT(*) as card_count FROM cards WHERE did = ?", (current_deck_id,))
+            count = cursor.fetchone()['card_count']
+            
+            message = "No cards available for review in deck " + deck_name + "."
+            if count > 0:
+                message = "No cards due for deck " + deck_name + " right now."
+                
+            return jsonify({"message": message}), 200
+            
+    except sqlite3.Error as e:
+        app.logger.error(f"Database error fetching next card: {e}")
+        return jsonify({"error": f"Database error occurred: {str(e)}"}), 500
     except Exception as e:
-        app.logger.exception(f"UNEXPECTED Error fetching review card for user {user_id}: {e}") 
+        app.logger.exception(f"Error fetching next card: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
     finally:
-        app.logger.debug("--> Entering finally block for /review") # Use logger (DEBUG)
         if conn:
-            app.logger.debug("--> Closing DB connection.") # Use logger (DEBUG)
             conn.close()
-        else:
-            app.logger.debug("--> No DB connection to close.") # Use logger (DEBUG)
 
 @app.route('/answer', methods=['POST'])
 @login_required
 def answer_card():
+    """Processes a user's answer to the current card in the session.
+    Expects: {'ease': 1-4, 'timeTaken': milliseconds} in the request body.
+    Note: ease 1 = Again, 2 = Hard, 3 = Good, 4 = Easy
+    """
     user_id = session['user_id']
     user_db_path = get_user_db_path(user_id)
-
-    # --- Get data from request and session ---
+    
+    # Get the current card ID from the session
+    current_card_id = session.get('currentCardId')
+    current_note_id = session.get('currentNoteId')
+    
+    # Get the ease from the request body (1-4)
     data = request.get_json()
-    ease = data.get('ease') # Expected: 1 (Again), 2 (Hard), 3 (Good), 4 (Easy)
-    time_taken_ms = data.get('time_taken', 10000) # Default 10 seconds if not provided
-
-    card_id = session.get('current_card_id')
-    note_id = session.get('current_note_id')
-    # fields = session.get('current_card_flds') # REMOVE: Fields are no longer stored in session
-
-    # Adjust the check to remove dependency on fields
-    if not card_id or not note_id or ease is None:
-        return jsonify({"error": "Missing card information in session or invalid request (no card_id/note_id/ease)"}), 400
-
+    
+    if not data or 'ease' not in data:
+        app.logger.warning("Missing ease in answer request")
+        return jsonify({"error": "Missing ease rating"}), 400
+    
+    ease = data.get('ease')
+    time_taken = data.get('timeTaken', 0)  # Use timeTaken parameter instead of time_taken
+    
+    # Validate ease value
     if ease not in [1, 2, 3, 4]:
+        app.logger.warning(f"Invalid ease value: {ease}")
         return jsonify({"error": "Invalid ease rating (must be 1, 2, 3, or 4)"}), 400
-
+    
+    # Make sure we have a current card in the session
+    if not current_card_id or not current_note_id:
+        app.logger.warning("Missing card information in session for answer processing")
+        return jsonify({"error": "Missing card information in session or invalid request. Please get a card first."}), 400
+    
+    # Process the answer
     conn = None
     try:
+        app.logger.info(f"Processing answer for card {current_card_id} (note {current_note_id}) with ease {ease}")
+        
         conn = sqlite3.connect(user_db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-
-        # --- Fetch current card state --- #
-        cursor.execute("SELECT queue, type, ivl, factor, reps, lapses, left, due FROM cards WHERE id = ?", (card_id,))
+        
+        # First, verify the card exists
+        cursor.execute("SELECT * FROM cards WHERE id = ?", (current_card_id,))
         card = cursor.fetchone()
         if not card:
+            app.logger.warning(f"Card not found: {current_card_id}")
             return jsonify({"error": "Card not found"}), 404
-
-        # --- Fetch collection creation time for day calculations --- #
-        cursor.execute("SELECT crt FROM col LIMIT 1")
-        col = cursor.fetchone()
-        if not col:
-             return jsonify({"error": "Collection data not found"}), 500
-        crt_time_sec = col['crt']
-
-        # --- Get current time values --- #
-        current_time_sec = int(time.time())
-        current_time_ms = int(current_time_sec * 1000)
-        days_passed = (current_time_sec - crt_time_sec) // 86400
-
-        # --- Store old values for revlog --- #
-        last_ivl = card['ivl']
-        revlog_type = card['type'] # Type of review (0=lrn, 1=rev, 2=relrn)
-
-        # --- Initialize new card state variables --- #
-        new_queue = card['queue']
-        new_type = card['type']
-        new_ivl = card['ivl']
-        new_factor = card['factor']
-        new_reps = card['reps']
-        new_lapses = card['lapses']
-        new_left = card['left']
-        new_due = card['due']
-
-        # --- Simplified Anki/SM-2 Scheduling Logic --- #
-
-        # Default learning steps (seconds) and graduation intervals (days)
-        # These would ideally come from deck config (dconf)
-        learning_steps_sec = [60, 600] # 1 min, 10 min
-        graduating_interval_good_days = 1
-        graduating_interval_easy_days = 4
-        relearning_steps_sec = [600] # 10 min after lapse
-        easy_bonus = 1.3 # Multiplier for easy rating on review cards
-        min_factor = 1300 # Minimum ease factor
-
-        if card['queue'] == 0: # NEW Card
-            new_reps = 1
-            if ease == 1: # Again
-                new_queue = 1 # Learning queue
-                new_type = 1
-                new_left = len(learning_steps_sec) # Start learning steps
-                new_due = current_time_sec + learning_steps_sec[0]
-                new_ivl = 0 # Interval not used directly in learning steps
-                new_lapses = 0
-            else: # Hard, Good, Easy -> Graduate immediately (simplified)
-                new_queue = 2 # Review queue
-                new_type = 2
-                new_left = 0
-                new_lapses = 0
-                new_factor = 2500 # Initial factor
-                if ease == 2: # Hard -> treat like Good for first graduation
-                    new_ivl = graduating_interval_good_days
-                elif ease == 3: # Good
-                    new_ivl = graduating_interval_good_days
-                else: # Easy
-                    new_ivl = graduating_interval_easy_days
-                new_due = days_passed + new_ivl # Due in days
-
-        elif card['queue'] == 1 or card['queue'] == 3: # LEARNING or RELEARNING Card
-            step_count = len(learning_steps_sec) if card['type'] == 1 else len(relearning_steps_sec)
-
-            if ease == 1: # Again
-                new_left = step_count # Reset steps
-                delay = learning_steps_sec[0] if card['type'] == 1 else relearning_steps_sec[0]
-                new_due = current_time_sec + delay
-                new_ivl = 0
-                if card['type'] == 2 or card['type'] == 3: # If it was review/relearning before this step
-                     new_lapses = card['lapses'] + 1 # Increment lapses only if it already lapsed
-                     new_factor = max(min_factor, card['factor'] - 200)
-                new_type = 1 # Ensure it's marked as learning
-            elif ease == 3: # Good
-                # Calculate how many steps are completed based on 'left'
-                # Anki's 'left' format is complex (e.g., 1001 means 1 step left, delay 1m)
-                # Simplification: treat 'left' as number of steps remaining.
-                current_step_index = step_count - card['left']
-                if current_step_index + 1 < step_count: # More steps remaining
-                    new_left = card['left'] - 1
-                    delay = learning_steps_sec[current_step_index + 1] if card['type'] == 1 else relearning_steps_sec[current_step_index + 1]
-                    new_due = current_time_sec + delay
-                    new_ivl = 0
-                    new_type = card['type'] # Keep type (1 or 3)
-                else: # Last step completed, graduate!
-                    new_queue = 2 # Review queue
-                    new_type = 2
+        
+        # Card properties to update
+        current_type = card['type']  # Current card type
+        current_queue = card['queue']  # Current queue (e.g., new, learning, review)
+        current_due = card['due']  # Current due date/time
+        current_interval = card['ivl']  # Current interval
+        current_factor = card['factor']  # Current ease factor
+        current_reps = card['reps']  # Review count
+        current_lapses = card['lapses']  # Number of times card was forgotten
+        current_left = card['left']  # Learning steps left
+        
+        # Get collection config for scheduling
+        cursor.execute("SELECT conf FROM col LIMIT 1")
+        col_config = cursor.fetchone()
+        if not col_config:
+            app.logger.error("Collection configuration not found")
+            return jsonify({"error": "Database error occurred during review update"}), 500
+        
+        coll_conf = json.loads(col_config['conf'])
+        
+        # Get deck-specific configuration 
+        deck_id = card['did']
+        cursor.execute("SELECT decks, dconf FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        decks_dict = json.loads(col_data['decks'])
+        dconf_dict = json.loads(col_data['dconf'])
+        
+        # Get the deck's configuration id
+        deck_conf_id = decks_dict[str(deck_id)].get('conf', 1)  # Default to 1 if not found
+        deck_conf = dconf_dict[str(deck_conf_id)]
+        
+        # Get the configuration settings for the current card state
+        if current_type == 0:  # 0 = new
+            schedule_conf = deck_conf['new']
+        elif current_type == 1:  # 1 = learning
+            schedule_conf = deck_conf['lapse'] if current_queue == 1 else deck_conf['new']
+        elif current_type == 2:  # 2 = review
+            schedule_conf = deck_conf['rev']
+        elif current_type == 3:  # 3 = relearning
+            schedule_conf = deck_conf['lapse']
+        else:
+            schedule_conf = deck_conf['new']  # Default fallback
+        
+        # Anki scheduling algorithm simplified - this is a very simplified version!
+        new_interval = current_interval
+        new_factor = current_factor
+        new_due = current_due
+        new_queue = current_queue
+        new_type = current_type
+        new_left = current_left
+        
+        # Get the current time
+        now = int(time.time())
+        today = now // 86400
+        
+        # Log this review in the revlog table
+        review_id = int(time.time() * 1000)  # Timestamp as ID
+        
+        # Calculate new interval based on ease and current state
+        if current_queue == 0:  # New card
+            if ease == 1:  # Again
+                new_queue = 1  # Learning
+                new_type = 1  # Learning
+                new_left = schedule_conf['delays'][0]  # Reset steps
+                new_due = now + (new_left * 60)  # Due in X minutes
+            else:  # Hard, Good, Easy
+                new_queue = 1  # Learning
+                new_type = 1  # Learning
+                step_index = 0 if ease == 2 else 1  # 2=Hard -> first step, 3=Good -> second step
+                if step_index < len(schedule_conf['delays']):
+                    new_left = schedule_conf['delays'][step_index]
+                    new_due = now + (new_left * 60)  # Due in X minutes
+                else:
+                    # Graduate to review
+                    new_queue = 2  # Review
+                    new_type = 2  # Review
+                    new_interval = 1  # 1 day for first review
+                    new_due = today + new_interval  # Due in X days
+                    new_left = 0  # No more steps
+        
+        elif current_queue == 1:  # Learning/relearning card
+            if ease == 1:  # Again
+                # Reset to first step
+                new_left = schedule_conf['delays'][0]
+                new_due = now + (new_left * 60)  # Due in X minutes
+            elif ease == 2:  # Hard - stay in same position
+                new_due = now + (current_left * 60)  # Due in same X minutes
+            else:  # Good or Easy
+                if current_left == 0 or ease == 4:  # Last step or marked easy
+                    # Graduate to review
+                    new_queue = 2  # Review
+                    new_type = 2  # Review
+                    new_interval = 1  # 1 day for first review
+                    new_due = today + new_interval  # Due in X days
+                    new_left = 0  # No more steps
+                else:
+                    # Move to next step
+                    step_index = 1  # Skip to next step
+                    if step_index < len(schedule_conf['delays']):
+                        new_left = schedule_conf['delays'][step_index]
+                        new_due = now + (new_left * 60)  # Due in X minutes
+                    else:
+                        # Graduate to review
+                        new_queue = 2  # Review
+                        new_type = 2  # Review
+                        new_interval = 1  # 1 day for first review
+                        new_due = today + new_interval  # Due in X days
+                        new_left = 0  # No more steps
+        
+        elif current_queue == 2:  # Review card
+            if ease == 1:  # Again (fail)
+                # Card lapses, move to relearning
+                new_queue = 1  # Learning (relearning)
+                new_type = 3  # Relearning
+                new_lapses = current_lapses + 1
+                if len(schedule_conf['delays']) > 0:
+                    new_left = schedule_conf['delays'][0]
+                    new_due = now + (new_left * 60)
+                else:
+                    # No relearning steps, back to review
+                    new_queue = 2  # Review
+                    new_interval = max(1, int(current_interval * schedule_conf['mult']))
+                    new_due = today + new_interval
                     new_left = 0
-                    new_reps = card['reps'] + 1
-                    new_ivl = graduating_interval_good_days # Graduate interval
-                    new_due = days_passed + new_ivl
-                    # Factor remains unchanged on graduation from learning (usually)
-                    new_factor = card['factor'] if card['factor'] else 2500
-            elif ease == 4: # Easy -> Graduate immediately
-                new_queue = 2 # Review queue
+            else:  # Hard, Good, Easy
+                # Calculate new interval based on ease button
+                if ease == 2:  # Hard
+                    factor_adjust = 0.8
+                    interval_adjust = schedule_conf['hardFactor']
+                elif ease == 3:  # Good
+                    factor_adjust = 1.0
+                    interval_adjust = 1.0
+                else:  # ease == 4, Easy
+                    factor_adjust = 1.3
+                    interval_adjust = schedule_conf['ease4']
+                
+                # Update interval
+                new_interval = max(1, int(current_interval * interval_adjust))
+                
+                # Update ease factor (min 1300)
+                factor_change = 0 if ease == 2 else 15 if ease == 3 else 30  # -0 for Hard, +15 for Good, +30 for Easy
+                new_factor = max(1300, current_factor + factor_change)
+                
+                # Calculate due date
+                new_due = today + new_interval
+                
+                # Keep in review queue
+                new_queue = 2
                 new_type = 2
-                new_left = 0
-                new_reps = card['reps'] + 1
-                new_ivl = graduating_interval_easy_days # Graduate interval (easy)
-                new_due = days_passed + new_ivl
-                new_factor = card['factor'] if card['factor'] else 2500 # Factor remains unchanged
-            # Ignoring Hard (ease=2) for learning for simplicity, treat as Good
-            elif ease == 2: # Hard -> Treat as Good for learning steps
-                 current_step_index = step_count - card['left']
-                 if current_step_index + 1 < step_count: # More steps remaining
-                     new_left = card['left'] - 1
-                     delay = learning_steps_sec[current_step_index + 1] if card['type'] == 1 else relearning_steps_sec[current_step_index + 1]
-                     new_due = current_time_sec + delay
-                     new_ivl = 0
-                     new_type = card['type']
-                 else: # Last step completed, graduate!
-                     new_queue = 2
-                     new_type = 2
-                     new_left = 0
-                     new_reps = card['reps'] + 1
-                     new_ivl = graduating_interval_good_days
-                     new_due = days_passed + new_ivl
-                     new_factor = card['factor'] if card['factor'] else 2500
-
-        elif card['queue'] == 2: # REVIEW Card
-            new_reps = card['reps'] + 1
-            if ease == 1: # Again (Lapse)
-                new_queue = 1 # Relearning queue
-                new_type = 3
-                new_lapses = card['lapses'] + 1
-                new_factor = max(min_factor, card['factor'] - 200)
-                new_left = len(relearning_steps_sec)
-                new_due = current_time_sec + relearning_steps_sec[0]
-                new_ivl = 0 # Interval reset on lapse
-            else: # Hard, Good, Easy
-                new_queue = 2 # Stays in review
-                new_type = 2
-                new_left = 0 # Not in learning steps
-                # Calculate next interval based on current interval, factor, and ease
-                if ease == 2: # Hard
-                    new_ivl = max(card['ivl'] + 1, int(card['ivl'] * 1.2))
-                    new_factor = max(min_factor, card['factor'] - 150)
-                elif ease == 3: # Good
-                    new_ivl = max(card['ivl'] + 1, int(card['ivl'] * (card['factor'] / 1000)))
-                    # Factor unchanged for Good
-                else: # Easy
-                    new_ivl = max(card['ivl'] + 1, int(card['ivl'] * (card['factor'] / 1000) * easy_bonus))
-                    new_factor = card['factor'] + 150
-                new_due = days_passed + new_ivl
-
-        # --- Update Card --- #
+        
+        # Update the card
         cursor.execute("""
-            UPDATE cards
-            SET queue = ?, type = ?, due = ?, ivl = ?, factor = ?, reps = ?, lapses = ?, left = ?, mod = ?
-            WHERE id = ?
+            UPDATE cards 
+            SET type=?, queue=?, due=?, ivl=?, factor=?, reps=?, lapses=?, left=?, mod=?
+            WHERE id=?
         """, (
-            new_queue, new_type, new_due, new_ivl, new_factor,
-            new_reps, new_lapses, new_left, current_time_sec,
-            card_id
+            new_type, new_queue, new_due, new_interval, new_factor,
+            current_reps + 1, current_lapses + (1 if ease == 1 and current_queue == 2 else 0),
+            new_left, now, current_card_id
         ))
-
-        # --- Log Review --- #
+        
+        # Log this review
         cursor.execute("""
             INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            current_time_ms,
-            card_id,
-            -1, # usn (local only)
-            ease,
-            new_ivl,
-            last_ivl,
-            new_factor,
-            time_taken_ms,
-            revlog_type # Type of review (0=lrn, 1=rev, 2=relrn)
+            review_id, current_card_id, -1, ease, new_interval, current_interval,
+            new_factor, time_taken, current_type  # 0=learn, 1=review, 2=relearn, 3=cram
         ))
-
+        
+        # Update collection modification time
+        cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
+        
+        # Commit the changes
         conn.commit()
-
-        # --- Clear session --- #
-        session.pop('current_card_id', None)
-        session.pop('current_note_id', None)
-        # session.pop('current_card_flds', None) # Already removed
-
-        # --- Return Answer --- #
-        # answer = fields[1] # No longer need to extract answer here
-        app.logger.info(f"Processed answer for card ID {card_id} for user {user_id} with ease {ease}") # INFO level
-        # Return simple success message instead of answer content
+        
+        # Clear the current card from the session
+        session.pop('currentCardId', None)
+        session.pop('currentNoteId', None)
+        
         return jsonify({"message": "Answer processed successfully"}), 200
-
+    
     except sqlite3.Error as e:
-        app.logger.error(f"Database error processing answer for user {user_id}, card {card_id}: {e}") # Use logger
-        if conn: conn.rollback()
+        app.logger.exception(f"Database error during review update: {e}")
+        if conn:
+            conn.rollback()
         return jsonify({"error": "Database error occurred during review update"}), 500
     except Exception as e:
-        app.logger.exception(f"Error processing answer for user {user_id}, card {card_id}: {e}") # Use logger.exception
-        if conn: conn.rollback()
-        # Potentially clear session variables here too?
-        session.pop('current_card_id', None)
-        session.pop('current_note_id', None)
-        # session.pop('current_card_flds', None) # Already removed
-        return jsonify({"error": "An internal server error occurred"}), 500
+        app.logger.exception(f"Error processing review: {e}")
+        if conn:
+            conn.rollback()
+        return jsonify({"error": f"Error processing review: {str(e)}"}), 500
     finally:
         if conn:
             conn.close()
@@ -1801,7 +1816,7 @@ def set_current_deck():
     user_db_path = get_user_db_path(user_id)
 
     data = request.get_json()
-    deck_id = data.get('deckId') # Expecting deck ID as string or int
+    deck_id = data.get('deckId') # Expecting deckId parameter in camelCase
     if deck_id is None:
         return jsonify({"error": "Missing deckId"}), 400
 
@@ -1844,9 +1859,9 @@ def set_current_deck():
         if conn:
             conn.close()
 
-@app.route('/decks/<int:deck_id>/stats', methods=['GET'])
+@app.route('/decks/<int:deckId>/stats', methods=['GET'])
 @login_required
-def get_deck_stats(deck_id):
+def get_deck_stats(deckId):
     """Calculates and returns CURRENT card status counts for a specific deck."""
     user_id = session['user_id']
     user_db_path = get_user_db_path(user_id)
@@ -1856,7 +1871,7 @@ def get_deck_stats(deck_id):
     # Remove timestamp calculation
     # start_timestamp_ms = ... 
 
-    app.logger.debug(f"Deck stats requested for deck: {deck_id}") # Simplified log
+    app.logger.debug(f"Deck stats requested for deck: {deckId}") # Simplified log
 
     conn = None
     try:
@@ -1870,11 +1885,11 @@ def get_deck_stats(deck_id):
         if not col_data or not col_data['decks']:
              return jsonify({"error": "Collection data not found."}), 500
         decks_dict = json.loads(col_data['decks'])
-        if str(deck_id) not in decks_dict:
+        if str(deckId) not in decks_dict:
              return jsonify({"error": "Deck not found or access denied."}), 404
 
         # Query cards for the specific deck - id no longer needed for filtering New
-        cursor.execute("SELECT queue, ivl FROM cards WHERE did = ?", (deck_id,))
+        cursor.execute("SELECT queue, ivl FROM cards WHERE did = ?", (deckId,))
         cards = cursor.fetchall()
 
         counts = {
@@ -1914,22 +1929,18 @@ def get_deck_stats(deck_id):
         return jsonify(response_data), 200
 
     except sqlite3.Error as e:
-        app.logger.error(f"Database error fetching stats for deck {deck_id}, user {user_id}: {e}")
+        app.logger.error(f"Database error fetching stats for deck {deckId}, user {user_id}: {e}")
         return jsonify({"error": "Database error occurred while fetching statistics."}), 500
     except Exception as e:
-        app.logger.exception(f"Error fetching stats for deck {deck_id}, user {user_id}: {e}")
+        app.logger.exception(f"Error fetching stats for deck {deckId}, user {user_id}: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
     finally:
         if conn:
             conn.close()
 
-@app.route('/cards/<card_id>', methods=['GET'])
-def get_card(card_id):
-    # Check if user is logged in
-    if 'user_id' not in session:
-        app.logger.warning("Unauthorized attempt to access card data")
-        return jsonify({"error": "Unauthorized access"}), 401
-    
+@app.route('/cards/<cardId>', methods=['GET'])
+@login_required
+def get_card(cardId):
     user_id = session['user_id']
     db_path = get_user_db_path(user_id)
     
@@ -1948,40 +1959,36 @@ def get_card(card_id):
             FROM cards c
             JOIN notes n ON c.nid = n.id
             WHERE c.id = ?
-        """, (card_id,))
+        """, (cardId,))
         
         result = cursor.fetchone()
         if not result:
-            app.logger.warning(f"Card {card_id} not found")
+            app.logger.warning(f"Card {cardId} not found")
             return jsonify({"error": "Card not found"}), 404
         
         # Parse fields from the note
         fields = result[0].split('\x1f')  # Anki separator for fields
         if len(fields) < 2:
-            app.logger.error(f"Card {card_id} has invalid field format")
+            app.logger.error(f"Card {cardId} has invalid field format")
             return jsonify({"error": "Invalid card format"}), 500
         
-        # Return the card details
+        # Return the card details using camelCase
         return jsonify({
-            "card_id": result[1],
+            "cardId": result[1],
             "front": fields[0],
             "back": fields[1]
         })
         
     except Exception as e:
-        app.logger.exception(f"Error fetching card {card_id}: {str(e)}")
+        app.logger.exception(f"Error fetching card {cardId}: {str(e)}")
         return jsonify({"error": f"Error fetching card: {str(e)}"}), 500
     finally:
         if 'conn' in locals():
             conn.close()
 
-@app.route('/cards/<card_id>', methods=['PUT'])
-def update_card(card_id):
-    # Check if user is logged in
-    if 'user_id' not in session:
-        app.logger.warning("Unauthorized attempt to update card")
-        return jsonify({"error": "Unauthorized access"}), 401
-    
+@app.route('/cards/<cardId>', methods=['PUT'])
+@login_required
+def update_card(cardId):
     # Get request data
     data = request.json
     if not data or 'front' not in data or 'back' not in data:
@@ -1992,163 +1999,83 @@ def update_card(card_id):
     back = data['back'].strip()
     
     if not front or not back:
-        app.logger.warning("Empty front or back field in card update request")
+        app.logger.warning("Empty front or back field")
         return jsonify({"error": "Front and back fields cannot be empty"}), 400
     
     user_id = session['user_id']
     db_path = get_user_db_path(user_id)
     
-    # Check if user's database exists
-    if not os.path.exists(db_path):
-        app.logger.error(f"Database not found for user {user_id}")
-        return jsonify({"error": "User database not found"}), 404
-    
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # First, get the note ID for this card
-        cursor.execute("SELECT nid FROM cards WHERE id = ?", (card_id,))
+        # Get the note ID for this card
+        cursor.execute("SELECT nid FROM cards WHERE id = ?", (cardId,))
         result = cursor.fetchone()
         
         if not result:
-            app.logger.warning(f"Card {card_id} not found")
+            app.logger.warning(f"Card {cardId} not found")
             return jsonify({"error": "Card not found"}), 404
         
         note_id = result[0]
         
-        # Update the note fields
-        new_fields = f"{front}\x1f{back}"
-        checksum = sha1_checksum(front)  # Calculate checksum on first field
-        current_time = int(time.time())
+        # Update the note's fields
+        # First, get the current fields to maintain any additional fields beyond front/back
+        cursor.execute("SELECT flds FROM notes WHERE id = ?", (note_id,))
+        current_fields = cursor.fetchone()[0]
         
-        cursor.execute("""
-            UPDATE notes 
-            SET flds = ?, csum = ?, mod = ?, sfld = ?
-            WHERE id = ?
-        """, (new_fields, int(checksum, 16) & 0xFFFFFFFF, current_time, front, note_id))
+        # Split into individual fields
+        field_list = current_fields.split('\x1f')
         
-        # Update the card's modification time
-        cursor.execute("""
-            UPDATE cards
-            SET mod = ?
-            WHERE id = ?
-        """, (current_time, card_id))
-        
-        # Update collection modification time
-        cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
-        
-        conn.commit()
-        app.logger.info(f"Successfully updated card {card_id}")
-        return jsonify({"success": True, "message": "Card updated successfully"})
-        
+        # Update just the front and back fields (first two)
+        if len(field_list) >= 2:
+            field_list[0] = front
+            field_list[1] = back
+            
+            # Rejoin with the Anki separator
+            new_fields = '\x1f'.join(field_list)
+            
+            # Calculate a new checksum for the first field
+            checksum = int(sha1_checksum(field_list[0]), 16) & 0xFFFFFFFF
+            
+            # Begin transaction
+            conn.execute("BEGIN")
+            
+            # Update the note
+            current_time = int(time.time())
+            cursor.execute("""
+                UPDATE notes 
+                SET flds = ?, sfld = ?, csum = ?, mod = ? 
+                WHERE id = ?
+            """, (new_fields, field_list[0], checksum, current_time, note_id))
+            
+            # Update card modification time
+            cursor.execute("UPDATE cards SET mod = ? WHERE id = ?", (current_time, cardId))
+            
+            # Update collection modification time
+            cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
+            
+            # Commit the transaction
+            conn.commit()
+            
+            app.logger.info(f"Successfully updated card {cardId}")
+            return jsonify({"success": True, "message": "Card updated successfully"})
+        else:
+            app.logger.error(f"Card {cardId} has invalid field structure")
+            return jsonify({"error": "Card has invalid field structure"}), 500
+            
     except Exception as e:
-        app.logger.exception(f"Error updating card {card_id}: {str(e)}")
+        app.logger.exception(f"Error updating card {cardId}: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
         return jsonify({"error": f"Error updating card: {str(e)}"}), 500
     finally:
         if 'conn' in locals():
             conn.close()
 
-@app.route('/decks/<deck_id>/cards', methods=['GET'])
-def get_deck_cards(deck_id):
-    # Check if user is logged in
-    if 'user_id' not in session:
-        app.logger.warning("Unauthorized attempt to access deck cards")
-        return jsonify({"error": "Unauthorized access"}), 401
-    
-    user_id = session['user_id']
-    db_path = get_user_db_path(user_id)
-    
-    # Check if user's database exists
-    if not os.path.exists(db_path):
-        app.logger.error(f"Database not found for user {user_id}")
-        return jsonify({"error": "User database not found"}), 404
-    
-    # Get pagination parameters
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-    
-    # Calculate offset for pagination
-    offset = (page - 1) * per_page
-    
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # First, check if the deck exists by querying the col table's decks JSON field
-        cursor.execute("SELECT decks FROM col LIMIT 1")
-        col_data = cursor.fetchone()
-        if not col_data or not col_data['decks']:
-            app.logger.warning("Collection data not found or invalid")
-            return jsonify({"error": "Collection data not found"}), 500
-            
-        decks_dict = json.loads(col_data['decks'])
-        if str(deck_id) not in decks_dict:
-            app.logger.warning(f"Deck {deck_id} not found")
-            return jsonify({"error": "Deck not found"}), 404
-            
-        deck_name = decks_dict[str(deck_id)]['name']
-        
-        # Get total number of cards in the deck
-        cursor.execute("""
-            SELECT COUNT(*) 
-            FROM cards c
-            WHERE c.did = ?
-        """, (deck_id,))
-        total_cards = cursor.fetchone()[0]
-        
-        # Query to get cards for the deck with pagination
-        cursor.execute("""
-            SELECT c.id, n.id AS note_id, n.flds, c.mod
-            FROM cards c
-            JOIN notes n ON c.nid = n.id
-            WHERE c.did = ?
-            ORDER BY c.id DESC
-            LIMIT ? OFFSET ?
-        """, (deck_id, per_page, offset))
-        
-        cards_data = []
-        for row in cursor.fetchall():
-            card_id, note_id, fields, mod_time = row
-            # Parse fields from the note (separated by the Anki separator \x1f)
-            field_list = fields.split('\x1f')
-            if len(field_list) >= 2:
-                cards_data.append({
-                    "card_id": card_id,
-                    "note_id": note_id,
-                    "front": field_list[0],
-                    "back": field_list[1],
-                    "modified": mod_time  # This is epoch timestamp
-                })
-        
-        # Return the cards with pagination metadata
-        return jsonify({
-            "deck_id": deck_id,
-            "deck_name": deck_name,
-            "cards": cards_data,
-            "pagination": {
-                "total": total_cards,
-                "page": page,
-                "per_page": per_page,
-                "total_pages": (total_cards + per_page - 1) // per_page
-            }
-        })
-        
-    except Exception as e:
-        app.logger.exception(f"Error fetching cards for deck {deck_id}: {str(e)}")
-        return jsonify({"error": f"Error fetching cards: {str(e)}"}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
-
-@app.route('/cards/<card_id>', methods=['DELETE'])
-def delete_card(card_id):
-    # Check if user is logged in
-    if 'user_id' not in session:
-        app.logger.warning("Unauthorized attempt to delete card")
-        return jsonify({"error": "Unauthorized access"}), 401
-    
+@app.route('/cards/<cardId>', methods=['DELETE'])
+@login_required
+def delete_card(cardId):
     user_id = session['user_id']
     db_path = get_user_db_path(user_id)
     
@@ -2162,11 +2089,11 @@ def delete_card(card_id):
         cursor = conn.cursor()
         
         # First, get the note ID for this card
-        cursor.execute("SELECT nid FROM cards WHERE id = ?", (card_id,))
+        cursor.execute("SELECT nid FROM cards WHERE id = ?", (cardId,))
         result = cursor.fetchone()
         
         if not result:
-            app.logger.warning(f"Card {card_id} not found")
+            app.logger.warning(f"Card {cardId} not found")
             return jsonify({"error": "Card not found"}), 404
         
         note_id = result[0]
@@ -2175,7 +2102,7 @@ def delete_card(card_id):
         conn.execute("BEGIN")
         
         # Delete the card
-        cursor.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+        cursor.execute("DELETE FROM cards WHERE id = ?", (cardId,))
         
         # Check if there are any other cards associated with this note
         cursor.execute("SELECT COUNT(*) FROM cards WHERE nid = ?", (note_id,))
@@ -2191,11 +2118,11 @@ def delete_card(card_id):
         # Commit the transaction
         conn.commit()
         
-        app.logger.info(f"Successfully deleted card {card_id}")
+        app.logger.info(f"Successfully deleted card {cardId}")
         return jsonify({"success": True, "message": "Card deleted successfully"})
         
     except Exception as e:
-        app.logger.exception(f"Error deleting card {card_id}: {str(e)}")
+        app.logger.exception(f"Error deleting card {cardId}: {str(e)}")
         if 'conn' in locals():
             conn.rollback()
         return jsonify({"error": f"Error deleting card: {str(e)}"}), 500
@@ -2203,14 +2130,10 @@ def delete_card(card_id):
         if 'conn' in locals():
             conn.close()
 
-@app.route('/decks/<int:deck_id>', methods=['DELETE'])
-def delete_deck(deck_id):
+@app.route('/decks/<int:deckId>', methods=['DELETE'])
+@login_required
+def delete_deck(deckId):
     """Delete a specific deck and all its cards"""
-    # Check if user is logged in
-    if 'user_id' not in session:
-        app.logger.warning("Unauthorized attempt to delete deck")
-        return jsonify({"error": "You must be logged in"}), 401
-    
     user_id = session['user_id']
     user_db_path = get_user_db_path(user_id)
     
@@ -2234,139 +2157,234 @@ def delete_deck(deck_id):
             return jsonify({"error": "Collection data not found"}), 500
             
         decks_dict = json.loads(col_data['decks'])
-        deck_id_str = str(deck_id)
+        deck_id_str = str(deckId)
         
         if deck_id_str not in decks_dict:
             conn.close()
-            app.logger.warning(f"Attempt to delete non-existent deck {deck_id}")
+            app.logger.warning(f"Attempt to delete non-existent deck {deckId}")
             return jsonify({"error": "Deck not found"}), 404
         
         deck_name = decks_dict[deck_id_str]['name']
-        app.logger.info(f"Deleting deck '{deck_name}' (ID: {deck_id}) for user {user_id}")
+        app.logger.info(f"Deleting deck '{deck_name}' (ID: {deckId}) for user {user_id}")
         
         # Start a transaction
         cursor.execute("BEGIN TRANSACTION")
         
-        # Delete all cards in the deck
-        cursor.execute("DELETE FROM cards WHERE did = ?", (deck_id,))
-        cards_deleted = cursor.rowcount
-        app.logger.info(f"Deleted {cards_deleted} cards from deck {deck_id}")
+        # Count cards in the deck
+        cursor.execute("SELECT COUNT(*) FROM cards WHERE did = ?", (deckId,))
+        card_count = cursor.fetchone()[0]
         
-        # Remove the deck from the decks dictionary
+        # Get the IDs of notes associated with this deck's cards
+        cursor.execute("SELECT DISTINCT nid FROM cards WHERE did = ?", (deckId,))
+        note_ids = [row[0] for row in cursor.fetchall()]
+        
+        # Delete cards in this deck
+        cursor.execute("DELETE FROM cards WHERE did = ?", (deckId,))
+        app.logger.debug(f"Deleted {card_count} cards from deck {deckId}")
+        
+        # For each note, check if it has any remaining cards
+        # If not, delete the note
+        for note_id in note_ids:
+            cursor.execute("SELECT COUNT(*) FROM cards WHERE nid = ?", (note_id,))
+            remaining_cards = cursor.fetchone()[0]
+            if remaining_cards == 0:
+                cursor.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+                app.logger.debug(f"Deleted orphaned note {note_id}")
+        
+        # Remove the deck from the decks JSON
         del decks_dict[deck_id_str]
         
         # Update the col table with the modified decks JSON
         current_time_ms = int(time.time() * 1000)
         cursor.execute("UPDATE col SET decks = ?, mod = ?", 
-                      (json.dumps(decks_dict), current_time_ms))
+                     (json.dumps(decks_dict), current_time_ms))
         
         # Commit the transaction
         conn.commit()
-        conn.close()
         
-        return jsonify({"message": f"Deck '{deck_name}' and {cards_deleted} cards deleted successfully"}), 200
+        app.logger.info(f"Successfully deleted deck '{deck_name}' with {card_count} cards")
+        return jsonify({
+            "message": f"Deck '{deck_name}' and {card_count} cards deleted successfully"
+        }), 200
         
     except sqlite3.Error as e:
-        # Rollback in case of error
-        if conn:
+        app.logger.exception(f"Database error deleting deck {deckId}: {str(e)}")
+        if 'conn' in locals() and conn:
             conn.rollback()
-            conn.close()
-        app.logger.error(f"Database error while deleting deck {deck_id}: {str(e)}")
         return jsonify({"error": "Failed to delete deck due to database error"}), 500
     except Exception as e:
-        if conn:
+        app.logger.exception(f"Error deleting deck {deckId}: {str(e)}")
+        if 'conn' in locals() and conn:
             conn.rollback()
-            conn.close()
-        app.logger.exception(f"Error deleting deck {deck_id}: {str(e)}")
         return jsonify({"error": "Failed to delete deck"}), 500
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
 
-@app.route('/decks/<int:deck_id>/rename', methods=['PUT'])
-def rename_deck(deck_id):
-    """Renames a specific deck"""
-    # Check if user is logged in
-    if 'user_id' not in session:
-        app.logger.warning("Unauthorized attempt to rename deck")
-        return jsonify({"error": "You must be logged in"}), 401
-    
+@app.route('/decks/<int:deckId>/rename', methods=['PUT'])
+@login_required
+def rename_deck(deckId):
+    """Rename a specific deck"""
     user_id = session['user_id']
     user_db_path = get_user_db_path(user_id)
     
-    # Get the new name from request JSON
+    # Get new deck name from request
     data = request.get_json()
-    new_name = data.get('name')
-    
-    if not new_name or not new_name.strip():
+    if not data or 'name' not in data or not data['name'].strip():
+        app.logger.warning("Missing or empty deck name in rename request")
         return jsonify({"error": "New deck name cannot be empty"}), 400
     
-    new_name = new_name.strip()
-    
-    # Check if user DB exists
-    if not os.path.exists(user_db_path):
-        app.logger.error(f"User database not found for user {user_id}")
-        return jsonify({"error": "User database not found"}), 500
+    new_deck_name = data['name'].strip()
     
     try:
         conn = sqlite3.connect(user_db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # First check if the deck exists in the col table's decks JSON
+        # First get the decks from the col table
         cursor.execute("SELECT decks FROM col LIMIT 1")
         col_data = cursor.fetchone()
         
         if not col_data or not col_data['decks']:
-            conn.close()
-            app.logger.warning(f"Collection data not found or invalid")
+            app.logger.warning("Collection data not found or invalid")
             return jsonify({"error": "Collection data not found"}), 500
             
         decks_dict = json.loads(col_data['decks'])
-        deck_id_str = str(deck_id)
+        deck_id_str = str(deckId)
         
+        # Check if the deck exists
         if deck_id_str not in decks_dict:
-            conn.close()
-            app.logger.warning(f"Attempt to rename non-existent deck {deck_id}")
+            app.logger.warning(f"Attempt to rename non-existent deck {deckId}")
             return jsonify({"error": "Deck not found"}), 404
         
-        # Check if another deck already has this name (case insensitive)
-        for d_id, deck in decks_dict.items():
-            if d_id != deck_id_str and deck['name'].lower() == new_name.lower():
-                conn.close()
+        old_deck_name = decks_dict[deck_id_str]['name']
+        
+        # Check if another deck with the same name already exists
+        # Case insensitive comparison
+        for did, deck in decks_dict.items():
+            if did != deck_id_str and deck['name'].lower() == new_deck_name.lower():
+                app.logger.warning(f"Attempt to rename deck to existing name: {new_deck_name}")
                 return jsonify({"error": "A deck with this name already exists"}), 409
         
-        old_name = decks_dict[deck_id_str]['name']
-        app.logger.info(f"Renaming deck from '{old_name}' to '{new_name}' (ID: {deck_id}) for user {user_id}")
-        
-        # Update the deck name in the dictionary
-        decks_dict[deck_id_str]['name'] = new_name
+        # Update the deck name
+        decks_dict[deck_id_str]['name'] = new_deck_name
         decks_dict[deck_id_str]['mod'] = int(time.time())  # Update modification time
         
-        # Update the col table with the modified decks JSON
+        # Update the collection
         current_time_ms = int(time.time() * 1000)
         cursor.execute("UPDATE col SET decks = ?, mod = ?", 
                       (json.dumps(decks_dict), current_time_ms))
-        
-        # Commit the changes
         conn.commit()
-        conn.close()
         
+        app.logger.info(f"Renamed deck from '{old_deck_name}' to '{new_deck_name}'")
         return jsonify({
-            "message": f"Deck renamed from '{old_name}' to '{new_name}' successfully",
-            "id": deck_id,
-            "name": new_name
+            "message": f"Deck renamed from '{old_deck_name}' to '{new_deck_name}' successfully",
+            "id": deckId,
+            "name": new_deck_name
         }), 200
         
     except sqlite3.Error as e:
-        if conn:
+        app.logger.exception(f"Database error renaming deck {deckId}: {str(e)}")
+        if 'conn' in locals() and conn:
             conn.rollback()
-            conn.close()
-        app.logger.error(f"Database error while renaming deck {deck_id}: {str(e)}")
         return jsonify({"error": "Failed to rename deck due to database error"}), 500
     except Exception as e:
-        if conn:
+        app.logger.exception(f"Error renaming deck {deckId}: {str(e)}")
+        if 'conn' in locals() and conn:
             conn.rollback()
-            conn.close()
-        app.logger.exception(f"Error renaming deck {deck_id}: {str(e)}")
         return jsonify({"error": "Failed to rename deck"}), 500
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
+@app.route('/decks/<deckId>/cards', methods=['GET'])
+@login_required
+def get_deck_cards(deckId):
+    user_id = session['user_id']
+    db_path = get_user_db_path(user_id)
+    
+    # Check if user's database exists
+    if not os.path.exists(db_path):
+        app.logger.error(f"Database not found for user {user_id}")
+        return jsonify({"error": "User database not found"}), 404
+    
+    # Get pagination parameters
+    page = request.args.get('page', 1, type=int)
+    perPage = request.args.get('perPage', 10, type=int)
+    
+    # Calculate offset for pagination
+    offset = (page - 1) * perPage
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # First, check if the deck exists by querying the col table's decks JSON field
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        col_data = cursor.fetchone()
+        if not col_data or not col_data['decks']:
+            app.logger.warning("Collection data not found or invalid")
+            return jsonify({"error": "Collection data not found"}), 500
+            
+        decks_dict = json.loads(col_data['decks'])
+        if str(deckId) not in decks_dict:
+            app.logger.warning(f"Deck {deckId} not found")
+            return jsonify({"error": "Deck not found"}), 404
+            
+        deck_name = decks_dict[str(deckId)]['name']
+        
+        # Get total number of cards in the deck
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM cards c
+            WHERE c.did = ?
+        """, (deckId,))
+        total_cards = cursor.fetchone()[0]
+        
+        # Query to get cards for the deck with pagination
+        cursor.execute("""
+            SELECT c.id, n.id AS note_id, n.flds, c.mod
+            FROM cards c
+            JOIN notes n ON c.nid = n.id
+            WHERE c.did = ?
+            ORDER BY c.id DESC
+            LIMIT ? OFFSET ?
+        """, (deckId, perPage, offset))
+        
+        cards_data = []
+        for row in cursor.fetchall():
+            card_id, note_id, fields, mod_time = row
+            # Parse fields from the note (separated by the Anki separator \x1f)
+            field_list = fields.split('\x1f')
+            if len(field_list) >= 2:
+                cards_data.append({
+                    "cardId": card_id,
+                    "noteId": note_id,
+                    "front": field_list[0],
+                    "back": field_list[1],
+                    "modified": mod_time  # This is epoch timestamp
+                })
+        
+        # Return the cards with pagination metadata using camelCase
+        return jsonify({
+            "deckId": deckId,
+            "deckName": deck_name,
+            "cards": cards_data,
+            "pagination": {
+                "total": total_cards,
+                "page": page,
+                "perPage": perPage,
+                "totalPages": (total_cards + perPage - 1) // perPage
+            }
+        })
+        
+    except Exception as e:
+        app.logger.exception(f"Error fetching cards for deck {deckId}: {str(e)}")
+        return jsonify({"error": f"Error fetching cards: {str(e)}"}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 # --- Server Start ---
 if __name__ == '__main__':

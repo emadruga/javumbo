@@ -229,8 +229,8 @@ function DecksPage({ user, onLogout }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({
     total: 0,
-    per_page: 10,
-    total_pages: 0
+    perPage: 10,
+    totalPages: 0
   });
 
   // New state for the delete confirmation modal
@@ -331,16 +331,16 @@ function DecksPage({ user, onLogout }) {
       setCards(response.cards || []);
       setPagination(response.pagination || {
         total: 0,
-        per_page: 10,
-        total_pages: 0,
+        perPage: 10,
+        totalPages: 0,
         page: 1
       });
       
       // Store the deck name for reference
-      if (response.deck_name) {
-        const deck = { id: response.deck_id, name: response.deck_name };
+      if (response.deckName) {
+        const deck = { id: response.deckId, name: response.deckName };
         setSelectedDeck(deck);
-        localStorage.setItem('currentDeckName', response.deck_name);
+        localStorage.setItem('currentDeckName', response.deckName);
       }
     } catch (err) {
       console.error("Error fetching cards:", err);
@@ -458,7 +458,7 @@ function DecksPage({ user, onLogout }) {
 
   // Handler for pagination
   const handlePageChange = (page) => {
-    if (page < 1 || page > pagination.total_pages) return;
+    if (page < 1 || page > pagination.totalPages) return;
     setCurrentPage(page);
     fetchCards(selectedDeck?.id, page);
   };
@@ -481,14 +481,14 @@ function DecksPage({ user, onLogout }) {
     
     setIsDeleting(true);
     try {
-      await deleteCard(cardToDelete.card_id);
+      await deleteCard(cardToDelete.cardId);
       // Remove card from state
-      setCards(cards.filter(card => card.card_id !== cardToDelete.card_id));
+      setCards(cards.filter(card => card.cardId !== cardToDelete.cardId));
       // Update pagination
       setPagination(prev => ({
         ...prev,
         total: prev.total - 1,
-        total_pages: Math.max(1, Math.ceil((prev.total - 1) / prev.per_page))
+        totalPages: Math.max(1, Math.ceil((prev.total - 1) / prev.perPage))
       }));
       // Close modal
       setShowDeleteModal(false);
@@ -731,18 +731,18 @@ function DecksPage({ user, onLogout }) {
             <>
               <ul style={cardListStyle}>
                 {cards.map((card) => (
-                  <li key={card.card_id} style={cardItemStyle}>
+                  <li key={card.cardId} style={cardItemStyle}>
                     <div 
                       style={cardHeaderStyle}
-                      onClick={() => toggleCardExpansion(card.card_id)}
+                      onClick={() => toggleCardExpansion(card.cardId)}
                     >
                       <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {card.front.length > 60 ? card.front.substring(0, 60) + '...' : card.front}
                       </div>
-                      <span>{expandedCardId === card.card_id ? '▲' : '▼'}</span>
+                      <span>{expandedCardId === card.cardId ? '▲' : '▼'}</span>
                     </div>
                     
-                    {expandedCardId === card.card_id && (
+                    {expandedCardId === card.cardId && (
                       <div style={cardContentStyle}>
                         <div style={{ marginBottom: '15px' }}>
                           <h5>{t('decks.front')}</h5>
@@ -754,7 +754,7 @@ function DecksPage({ user, onLogout }) {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                           <button 
-                            onClick={() => handleEditCard(card.card_id)}
+                            onClick={() => handleEditCard(card.cardId)}
                             style={{...buttonStyle, backgroundColor: '#007bff', color: 'white'}}
                           >
                             {t('cards.edit')}
@@ -775,7 +775,7 @@ function DecksPage({ user, onLogout }) {
                 }
               </ul>
               
-              {pagination.total_pages > 1 && (
+              {pagination.totalPages > 1 && (
                 <div style={paginationStyle}>
                   <button 
                     style={paginationButtonStyle}
@@ -794,20 +794,20 @@ function DecksPage({ user, onLogout }) {
                     navigate_before
                   </button>
                   <span style={{ padding: '5px 10px' }}>
-                    {t('decks.page', { currentPage, totalPages: pagination.total_pages })}
+                    {t('decks.page', { currentPage, totalPages: pagination.totalPages })}
                   </span>
                   <button 
                     style={paginationButtonStyle}
                     onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === pagination.total_pages}
+                    disabled={currentPage === pagination.totalPages}
                     title={t('common.next')}
                   >
                     navigate_next
                   </button>
                   <button 
                     style={paginationButtonStyle}
-                    onClick={() => handlePageChange(pagination.total_pages)}
-                    disabled={currentPage === pagination.total_pages}
+                    onClick={() => handlePageChange(pagination.totalPages)}
+                    disabled={currentPage === pagination.totalPages}
                     title={t('common.last')}
                   >
                     last_page

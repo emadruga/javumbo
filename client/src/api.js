@@ -8,7 +8,7 @@ export const getDecks = async () => {
 
 // Set the current deck
 export const setDeck = async (deckId) => {
-  const response = await axiosInstance.put('/decks/current', { deck_id: deckId });
+  const response = await axiosInstance.put('/decks/current', { deckId });
   return response.data;
 };
 
@@ -19,9 +19,9 @@ export const getNextCard = async () => {
 };
 
 // Answer a review card
-export const answerCard = async ({ ease, time_taken }) => {
-  // card_id is implicitly handled by the server session/state for the current card
-  const response = await axiosInstance.post('/answer', { ease, time_taken });
+export const answerCard = async ({ ease, timeTaken }) => {
+  // cardId is implicitly handled by the server session/state for the current card
+  const response = await axiosInstance.post('/answer', { ease, timeTaken });
   return response.data;
 };
 
@@ -52,7 +52,7 @@ export const updateCard = async (cardId, { front, back }) => {
 // Get all cards for a specific deck with pagination
 export const getDeckCards = async (deckId, page = 1, perPage = 10) => {
   const response = await axiosInstance.get(`/decks/${deckId}/cards`, {
-    params: { page, per_page: perPage }
+    params: { page, perPage }
   });
   return response.data;
 };
