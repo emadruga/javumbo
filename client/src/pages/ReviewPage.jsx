@@ -34,14 +34,14 @@ function ReviewPage({ user, onLogout }) {
       const nextCardData = await getNextCard();
       if (!isMounted) return;
 
-      if (nextCardData && nextCardData.card_id) {
+      if (nextCardData && nextCardData.cardId) {
         setCard(nextCardData);
         setShowAnswer(false);
         setStartTime(Date.now());
         setReviewMessage(`${t('review.reviewing')}: ${currentDeckName}`);
       } else {
         setCard(null);
-        setReviewMessage(nextCardData.message || t('review.noCardsMessage', { deckName: currentDeckName }));
+        setReviewMessage(nextCardData?.message || t('review.noCardsMessage', { deckName: currentDeckName }));
       }
     } catch (err) {
       if (!isMounted) return;

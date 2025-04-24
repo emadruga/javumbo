@@ -13,6 +13,7 @@ import tempfile # For creating temporary directories
 import logging # Import logging module
 import traceback # Keep for explicit exception logging if needed
 import datetime # Import datetime
+from functools import wraps
 
 # Get the directory where app.py resides
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -24,6 +25,7 @@ ADMIN_DB_PATH = os.path.join(basedir, 'admin.db') # Path relative to app.py
 FLASHCARD_DB_PATH = 'flashcards.db' # We will create user-specific DBs later, this is a placeholder
 SECRET_KEY = os.urandom(24) # For session management
 EXPORT_DIR = os.path.join(basedir, 'exports') # Path relative to app.py
+DAILY_NEW_LIMIT = 20 # Maximum number of new cards to introduce per day per user
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -1161,9 +1163,137 @@ def add_initial_flashcards(db_path, model_id):
         if conn:
             conn.close()
 
-# --- User Session Check ---
-# Decorator to protect routes that require login
-from functools import wraps
+# --- Helper Functions for Review Logic ---
+
+def _getDbConnection(userDbPath):
+    """Establishes and returns a database connection with row factory."""
+    try:
+        conn = sqlite3.connect(userDbPath)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except sqlite3.Error as e:
+        app.logger.error(f"Database connection error to {userDbPath}: {e}")
+        raise  # Re-raise the exception to be handled by the caller
+
+def _getCollectionConfig(cursor):
+    """Fetches essential configuration from the col table."""
+    try:
+        cursor.execute("SELECT crt, conf, decks FROM col LIMIT 1")
+        colData = cursor.fetchone()
+        if not colData:
+            raise ValueError("Collection configuration could not be read")
+
+        confDict = json.loads(colData['conf'])
+        decksDict = json.loads(colData['decks'])
+        currentDeckId = confDict.get('curDeck', 1)
+        deckName = decksDict.get(str(currentDeckId), {}).get('name', 'Default')
+
+        return {
+            "collectionCreationTime": colData['crt'],
+            "currentDeckId": currentDeckId,
+            "deckName": deckName
+        }
+    except (sqlite3.Error, json.JSONDecodeError, KeyError, ValueError) as e:
+        app.logger.error(f"Error processing collection config: {e}")
+        raise ValueError("Failed to process collection configuration")
+
+def _calculateDayCutoff(collectionCreationTime):
+    """Calculates the current time and day cutoff based on collection creation."""
+    now = int(time.time())
+    # Calculate days since collection creation time, this is how Anki determines the 'day'
+    dayCutoff = (now - collectionCreationTime) // 86400
+    return now, dayCutoff
+
+def _countNewCardsReviewedToday(cursor, dayCutoff, collectionCreationTime):
+    """Counts cards marked as 'new' (type=0) in today's review log."""
+    # Calculate the timestamp for the start of the current day relative to collection creation
+    startOfDayTimestampMs = (collectionCreationTime + dayCutoff * 86400) * 1000
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM revlog 
+            WHERE id >= ? AND type = 0
+        """, (startOfDayTimestampMs,))
+        countResult = cursor.fetchone()
+        return countResult[0] if countResult else 0
+    except sqlite3.Error as e:
+        app.logger.error(f"Error counting new cards reviewed today: {e}")
+        return 0 # Fail safe: assume 0 if error occurs
+
+def _fetchLearningCard(cursor, currentDeckId, now):
+    """Fetches the next due learning/relearning card."""
+    try:
+        cursor.execute("""
+            SELECT c.id, c.nid, c.queue, n.flds
+            FROM cards c JOIN notes n ON c.nid = n.id
+            WHERE c.did = ? AND (c.queue = 1 OR c.queue = 3) AND c.due <= ?
+            ORDER BY c.due
+            LIMIT 1
+        """, (currentDeckId, now))
+        return cursor.fetchone()
+    except sqlite3.Error as e:
+        app.logger.error(f"Error fetching learning card: {e}")
+        return None
+
+def _fetchReviewCard(cursor, currentDeckId, dayCutoff):
+    """Fetches the next due review card."""
+    try:
+        cursor.execute("""
+            SELECT c.id, c.nid, c.queue, n.flds, c.due, c.ivl
+            FROM cards c JOIN notes n ON c.nid = n.id
+            WHERE c.did = ? AND c.queue = 2 AND c.due <= ?
+            ORDER BY c.due
+            LIMIT 1
+        """, (currentDeckId, dayCutoff))
+        return cursor.fetchone()
+    except sqlite3.Error as e:
+        app.logger.error(f"Error fetching review card: {e}")
+        return None
+
+def _fetchNewCard(cursor, currentDeckId):
+    """Fetches the next new card randomly.""" # <-- Updated docstring
+    try:
+        # Order by RANDOM() to select a random new card
+        cursor.execute("""
+            SELECT c.id, c.nid, c.queue, n.flds
+            FROM cards c JOIN notes n ON c.nid = n.id
+            WHERE c.did = ? AND c.queue = 0
+            ORDER BY RANDOM() 
+            LIMIT 1
+        """, (currentDeckId,))
+        return cursor.fetchone()
+    except sqlite3.Error as e:
+        app.logger.error(f"Error fetching new card: {e}")
+        return None
+
+def _formatCardResponse(cardData):
+    """Formats the card data for the JSON response and updates session."""
+    if not cardData:
+        return None
+    
+    try:
+        fields = cardData['flds'].split('\x1f') # Anki separator
+        front = fields[0]
+        back = fields[1] if len(fields) > 1 else ""
+        
+        # Store the current card ID in the session for the answer endpoint
+        session['currentCardId'] = cardData['id']
+        session['currentNoteId'] = cardData['nid']
+        
+        return {
+            "cardId": cardData['id'],
+            "front": front,
+            "back": back,
+            "queue": cardData['queue']
+        }
+    except Exception as e:
+        app.logger.error(f"Error formatting card response: {e} for cardData: {cardData}")
+        # Clear potentially inconsistent session data
+        session.pop('currentCardId', None)
+        session.pop('currentNoteId', None)
+        return None
+
+# --- Authentication Decorator ---
 
 def login_required(f):
     @wraps(f)
@@ -1176,111 +1306,100 @@ def login_required(f):
 
 # --- Flashcard Review Logic ---
 
-# TODO: Implement SM-2 algorithm logic here
-
 @app.route('/review', methods=['GET'])
 @login_required
 def get_next_card():
-    """Fetches the next card due for review"""
-    user_id = session['user_id']
-    user_db_path = get_user_db_path(user_id)
+    """Fetches the next card due for review using prioritized queues and daily limits."""
+    userId = session['user_id']
+    userDbPath = get_user_db_path(userId)
     
-    # Check if user's database exists
-    if not os.path.exists(user_db_path):
-        app.logger.error(f"User database not found for user {user_id}")
+    if not os.path.exists(userDbPath):
+        app.logger.error(f"User database not found for user {userId} at {userDbPath}")
         return jsonify({"error": "User database not found. Please re-register or contact support."}), 404
     
     conn = None
     try:
-        conn = sqlite3.connect(user_db_path)
-        conn.row_factory = sqlite3.Row
+        conn = _getDbConnection(userDbPath)
         cursor = conn.cursor()
-        
-        # Get the collection creation time and current deck ID
-        cursor.execute("SELECT crt, conf FROM col LIMIT 1")
-        col_data = cursor.fetchone()
-        if not col_data:
-            return jsonify({"error": "Collection configuration or creation time could not be read"}), 500
-        
-        conf_dict = json.loads(col_data['conf'])
-        current_deck_id = conf_dict.get('curDeck', 1)  # Default to deck ID 1 if not set
 
-        # Get current deck name
-        cursor.execute("SELECT decks FROM col")
-        decks_data = cursor.fetchone()
-        decks_dict = json.loads(decks_data['decks'])
-        deck_name = decks_dict.get(str(current_deck_id), {}).get('name', 'Default')
+        # Fetch configuration and calculate time cutoffs
+        try:
+            config = _getCollectionConfig(cursor)
+            collectionCreationTime = config['collectionCreationTime']
+            currentDeckId = config['currentDeckId']
+            deckName = config['deckName']
+        except ValueError as e:
+            # Error logged in helper, return error response
+            return jsonify({"error": str(e)}), 500
+
+        now, dayCutoff = _calculateDayCutoff(collectionCreationTime)
         
-        # Calculate current day based on collection creation time
-        now = int(time.time())
-        day_cut_off = (now - col_data['crt']) // 86400  # Days since collection creation
+        # Count new cards reviewed today
+        newCardsSeenToday = _countNewCardsReviewedToday(cursor, dayCutoff, collectionCreationTime)
         
-        # Query for the next card to review from the current deck
-        # This simplified query follows Anki's general approach:
-        # 1. Get cards in learning mode (queue=1)
-        # 2. Get cards in review that are due (queue=2, due ≤ day_cut_off)
-        # 3. Get new cards (queue=0)
-        
-        cursor.execute("""
-            SELECT c.id, c.nid, c.queue, n.flds
-            FROM cards c
-            JOIN notes n ON c.nid = n.id
-            WHERE c.did = ? AND c.queue >= 0 AND c.queue <= 3
-            ORDER BY 
-                CASE 
-                    WHEN c.queue = 1 THEN 0  -- Learning cards first
-                    WHEN c.queue = 3 THEN 0  -- Also learning (relearning)
-                    WHEN c.queue = 2 AND c.due <= ? THEN 1  -- Due review cards next
-                    WHEN c.queue = 0 THEN 2  -- New cards last
-                    ELSE 3  -- Everything else (shouldn't hit this)
-                END,
-                CASE 
-                    WHEN c.queue = 1 OR c.queue = 3 THEN c.due  -- Sort learning by due time
-                    WHEN c.queue = 2 THEN c.due  -- Sort review by due date
-                    ELSE c.id  -- Sort new cards by ID
-                END
-            LIMIT 1
-        """, (current_deck_id, day_cut_off))
-        
-        card = cursor.fetchone()
-        
-        if card:
-            # Split the fields string to get front and back
-            fields = card['flds'].split('\x1f')  # Anki separator
-            front = fields[0]
-            back = fields[1] if len(fields) > 1 else ""
-            
-            # Store the current card ID in the session for the answer endpoint
-            session['currentCardId'] = card['id']
-            session['currentNoteId'] = card['nid']
-            
-            return jsonify({
-                "cardId": card['id'],
-                "front": front,
-                "back": back,
-                "queue": card['queue']
-            }), 200
+        app.logger.debug(f"User {userId}, Deck {currentDeckId}: Day Cutoff={dayCutoff}, Now={now}, New Seen={newCardsSeenToday}/{DAILY_NEW_LIMIT}")
+
+        nextCardData = None
+
+        # 1. Check for Learning Cards
+        nextCardData = _fetchLearningCard(cursor, currentDeckId, now)
+        if nextCardData:
+            app.logger.debug(f"Found learning card {nextCardData['id']}")
+
+        # 2. Check for Due Review Cards
+        if not nextCardData:
+            nextCardData = _fetchReviewCard(cursor, currentDeckId, dayCutoff)
+            if nextCardData:
+                # Log details if a review card (Young or Mature) is fetched
+                app.logger.info(f"Found review card {nextCardData['id']} (queue={nextCardData['queue']}). Card Due: {nextCardData['due']}, Card Interval: {nextCardData['ivl']} days. Current Day Cutoff: {dayCutoff}")
+
+        # 3. Check for New Cards (respecting limit)
+        if not nextCardData:
+            if newCardsSeenToday < DAILY_NEW_LIMIT:
+                nextCardData = _fetchNewCard(cursor, currentDeckId)
+                if nextCardData:
+                    app.logger.debug(f"Found new card {nextCardData['id']}")
+                else:
+                     app.logger.debug("No more new cards available in deck.")
+            else:
+                app.logger.debug(f"Daily new card limit ({DAILY_NEW_LIMIT}) reached.")
+
+        # Format and return card if found
+        if nextCardData:
+            responsePayload = _formatCardResponse(nextCardData)
+            if responsePayload:
+                 return jsonify(responsePayload), 200
+            else:
+                # Error formatting or card invalid, treat as internal error
+                return jsonify({"error": "Failed to process card data."}), 500
         else:
-            # Clear any card in session if no card found
+            # No card found in any queue (or new limit reached)
             session.pop('currentCardId', None)
             session.pop('currentNoteId', None)
             
-            # Check if there are any cards at all in this deck
-            cursor.execute("SELECT COUNT(*) as card_count FROM cards WHERE did = ?", (current_deck_id,))
-            count = cursor.fetchone()['card_count']
+            # Check total remaining cards for message accuracy
+            cursor.execute("SELECT COUNT(*) as card_count FROM cards WHERE did = ? AND queue >= 0 AND queue <= 3", (currentDeckId,))
+            countResult = cursor.fetchone()
+            totalCardsInDeck = countResult['card_count'] if countResult else 0
             
-            message = "No cards available for review in deck " + deck_name + "."
-            if count > 0:
-                message = "No cards due for deck " + deck_name + " right now."
-                
+            message = f"No cards available for review in deck '{deckName}'."
+            if totalCardsInDeck > 0:
+                if newCardsSeenToday >= DAILY_NEW_LIMIT and _fetchNewCard(cursor, currentDeckId) is not None:
+                    message = f"Daily limit of {DAILY_NEW_LIMIT} new cards reached for deck '{deckName}'."
+                else: 
+                    message = f"No cards due for deck '{deckName}' right now."
+                    
+            app.logger.info(message) # Log the final message
             return jsonify({"message": message}), 200
             
     except sqlite3.Error as e:
-        app.logger.error(f"Database error fetching next card: {e}")
-        return jsonify({"error": f"Database error occurred: {str(e)}"}), 500
+        app.logger.error(f"Database error in get_next_card for user {userId}: {e}")
+        # Use traceback.format_exc() for detailed debug logs if needed
+        # app.logger.error(traceback.format_exc())
+        return jsonify({"error": f"A database error occurred."}), 500
     except Exception as e:
-        app.logger.exception(f"Error fetching next card: {e}")
-        return jsonify({"error": "An internal server error occurred"}), 500
+        app.logger.exception(f"Unexpected error in get_next_card for user {userId}: {e}")
+        return jsonify({"error": "An internal server error occurred."}), 500
     finally:
         if conn:
             conn.close()
@@ -1346,20 +1465,32 @@ def answer_card():
         current_left = card['left']  # Learning steps left
         
         # Get collection config for scheduling
-        cursor.execute("SELECT conf FROM col LIMIT 1")
-        col_config = cursor.fetchone()
-        if not col_config:
+        cursor.execute("SELECT conf, crt FROM col LIMIT 1") # <-- Fetch crt as well
+        col_data = cursor.fetchone()
+        if not col_data:
             app.logger.error("Collection configuration not found")
             return jsonify({"error": "Database error occurred during review update"}), 500
         
-        coll_conf = json.loads(col_config['conf'])
+        coll_conf = json.loads(col_data['conf'])
+        collectionCreationTime = col_data['crt'] # <-- Store crt
         
         # Get deck-specific configuration 
         deck_id = card['did']
+        # No need to fetch decks/dconf again if we already have col_data
+        # cursor.execute("SELECT decks, dconf FROM col LIMIT 1")
+        # col_data_deck = cursor.fetchone() # This is redundant
+        # decks_dict = json.loads(col_data_deck['decks'])
+        # dconf_dict = json.loads(col_data_deck['dconf'])
+
+        # Fetch decks and dconf from col table (assuming they exist as TEXT columns)
         cursor.execute("SELECT decks, dconf FROM col LIMIT 1")
-        col_data = cursor.fetchone()
-        decks_dict = json.loads(col_data['decks'])
-        dconf_dict = json.loads(col_data['dconf'])
+        deck_config_data = cursor.fetchone()
+        if not deck_config_data:
+             app.logger.error("Decks or Dconf configuration not found in col table")
+             return jsonify({"error": "Database configuration error"}), 500
+
+        decks_dict = json.loads(deck_config_data['decks'])
+        dconf_dict = json.loads(deck_config_data['dconf'])
         
         # Get the deck's configuration id
         deck_conf_id = decks_dict[str(deck_id)].get('conf', 1)  # Default to 1 if not found
@@ -1385,12 +1516,14 @@ def answer_card():
         new_type = current_type
         new_left = current_left
         
-        # Get the current time
+        # Get the current time and calculate day cutoff relative to collection creation
         now = int(time.time())
-        today = now // 86400
+        # today = now // 86400 # Don't use epoch day
+        dayCutoff = (now - collectionCreationTime) // 86400 # <-- Use dayCutoff
         
         # Log this review in the revlog table
         review_id = int(time.time() * 1000)  # Timestamp as ID
+        review_log_type = current_type # Default log type
         
         # Calculate new interval based on ease and current state
         if current_queue == 0:  # New card
@@ -1411,7 +1544,7 @@ def answer_card():
                     new_queue = 2  # Review
                     new_type = 2  # Review
                     new_interval = 1  # 1 day for first review
-                    new_due = today + new_interval  # Due in X days
+                    new_due = dayCutoff + new_interval  # <-- Use dayCutoff
                     new_left = 0  # No more steps
         
         elif current_queue == 1:  # Learning/relearning card
@@ -1427,7 +1560,7 @@ def answer_card():
                     new_queue = 2  # Review
                     new_type = 2  # Review
                     new_interval = 1  # 1 day for first review
-                    new_due = today + new_interval  # Due in X days
+                    new_due = dayCutoff + new_interval  # <-- Use dayCutoff
                     new_left = 0  # No more steps
                 else:
                     # Move to next step
@@ -1440,7 +1573,7 @@ def answer_card():
                         new_queue = 2  # Review
                         new_type = 2  # Review
                         new_interval = 1  # 1 day for first review
-                        new_due = today + new_interval  # Due in X days
+                        new_due = dayCutoff + new_interval  # <-- Use dayCutoff
                         new_left = 0  # No more steps
         
         elif current_queue == 2:  # Review card
@@ -1449,41 +1582,64 @@ def answer_card():
                 new_queue = 1  # Learning (relearning)
                 new_type = 3  # Relearning
                 new_lapses = current_lapses + 1
-                if len(schedule_conf['delays']) > 0:
-                    new_left = schedule_conf['delays'][0]
+                # Correctly access lapse delays from deck_conf
+                lapse_conf = deck_conf.get('lapse', {})
+                lapse_delays = lapse_conf.get('delays', [10]) # Default delay if missing
+                lapse_mult = lapse_conf.get('mult', 0.0) # Lapse interval multiplier
+
+                if len(lapse_delays) > 0:
+                    new_left = lapse_delays[0]
                     new_due = now + (new_left * 60)
+                    new_interval = 0 # Interval is 0 during learning/relearning steps
                 else:
-                    # No relearning steps, back to review
-                    new_queue = 2  # Review
-                    new_interval = max(1, int(current_interval * schedule_conf['mult']))
-                    new_due = today + new_interval
+                    # No relearning steps defined, reschedule based on lapse multiplier
+                    new_queue = 2  # Stay in review queue
+                    new_type = 2  # Still a review card conceptually
+                    new_interval = max(1, int(current_interval * lapse_mult)) # Apply multiplier
+                    new_due = dayCutoff + new_interval
                     new_left = 0
+                review_log_type = 2 # Type 2 for relearn/lapse
             else:  # Hard, Good, Easy
                 # Calculate new interval based on ease button
+                # Get review config safely
+                rev_conf = deck_conf.get('rev', {})
+                hard_factor = rev_conf.get('hardFactor', 1.2)
+                easy_bonus = rev_conf.get('ease4', 1.3) # Called ease4 in Anki JSON
+                interval_factor = rev_conf.get('ivlFct', 1.0) # General interval factor
+
                 if ease == 2:  # Hard
-                    factor_adjust = 0.8
-                    interval_adjust = schedule_conf['hardFactor']
+                    # factor_adjust = 0.8 # This isn't how factor is adjusted
+                    interval_adjust = hard_factor
+                    factor_change = -150 # Anki-like adjustment
                 elif ease == 3:  # Good
-                    factor_adjust = 1.0
-                    interval_adjust = 1.0
+                    # factor_adjust = 1.0 # Replaced
+                    interval_adjust = interval_factor # Use the general interval factor
+                    factor_change = 0 # No change for Good in basic Anki SM2 variant
                 else:  # ease == 4, Easy
-                    factor_adjust = 1.3
-                    interval_adjust = schedule_conf['ease4']
+                    # factor_adjust = 1.3 # Replaced
+                    interval_adjust = easy_bonus * interval_factor # Easy bonus applies on top
+                    factor_change = 150 # Anki-like adjustment
                 
-                # Update interval
-                new_interval = max(1, int(current_interval * interval_adjust))
+                # Update interval: apply interval factor and specific ease multiplier
+                # The calculation is more complex in real Anki, involving fuzz factor etc.
+                # Simplified: Interval = Previous Interval * Ease Multiplier * General Interval Factor
+                new_interval = max(current_interval + 1, int(current_interval * interval_adjust * interval_factor))
                 
                 # Update ease factor (min 1300)
-                factor_change = 0 if ease == 2 else 15 if ease == 3 else 30  # -0 for Hard, +15 for Good, +30 for Easy
+                # factor_change = 0 if ease == 2 else 15 if ease == 3 else 30  # Old logic
                 new_factor = max(1300, current_factor + factor_change)
                 
                 # Calculate due date
-                new_due = today + new_interval
+                new_due = dayCutoff + new_interval # <-- Use dayCutoff
                 
                 # Keep in review queue
                 new_queue = 2
                 new_type = 2
+                review_log_type = 1 # Type 1 for review success
         
+        # Final assignment for lapses (only increases on review lapse)
+        final_lapses = current_lapses + (1 if ease == 1 and current_queue == 2 else 0)
+
         # Update the card
         cursor.execute("""
             UPDATE cards 
@@ -1491,7 +1647,7 @@ def answer_card():
             WHERE id=?
         """, (
             new_type, new_queue, new_due, new_interval, new_factor,
-            current_reps + 1, current_lapses + (1 if ease == 1 and current_queue == 2 else 0),
+            current_reps + 1, final_lapses, # Use final_lapses
             new_left, now, current_card_id
         ))
         
@@ -1501,7 +1657,7 @@ def answer_card():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             review_id, current_card_id, -1, ease, new_interval, current_interval,
-            new_factor, time_taken, current_type  # 0=learn, 1=review, 2=relearn, 3=cram
+            new_factor, time_taken, review_log_type # <-- Use calculated review_log_type
         ))
         
         # Update collection modification time
