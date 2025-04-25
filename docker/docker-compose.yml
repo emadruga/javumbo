@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: flashcard_server
+    volumes:
+      # Mount the server code directory into the container
+      # This allows code changes on the host to be reflected (useful for dev)
+      # AND provides host access to the code and databases as requested.
+      - ./server:/app
+      # Note: The admin.db and user_dbs are within ./server, so they are covered by the above mount.
+      # The paths inside app.py (e.g., os.path.join(basedir, 'admin.db')) will resolve correctly
+      # relative to the WORKDIR /app inside the container.
+    env_file:
+      # Load environment variables (like SECRET_KEY) from this file
+      - ./server/.env
+    expose:
+      # Expose port 8000 internally for Nginx, but not to the host
+      - "8000"
+    restart: unless-stopped
+    networks:
+      - flashcard-net
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: flashcard_client
+    ports:
+      # Map host port 80 to container port 80 (Nginx)
+      # Use 443:80 if setting up SSL directly on the host proxy
+      - "80:80"
+    depends_on:
+      - server # Ensure server starts before client (mainly for proxy readiness)
+    restart: unless-stopped
+    networks:
+      - flashcard-net
+
+networks:
+  flashcard-net:
+    driver: bridge
+
+# Optional: Define a named volume if you prefer not to bind mount the server dir,
+# but bind mount is needed for the requested host access to DBs.
+# volumes:
+#   server_data:
+#   user_dbs: 

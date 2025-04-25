@@ -310,6 +310,139 @@ Certbot will automatically modify your Nginx configuration for HTTPS and set up 
 *   Try registering, logging in, creating/selecting decks, adding cards, and reviewing cards.
 *   Check Nginx logs (`/var/log/nginx/access.log`, `/var/log/nginx/error.log`) and the Gunicorn service logs (`sudo journalctl -u flashcard-app.service`) for any errors.
 
+## 6. Docker Deployment (Alternative)
+
+This section provides an alternative deployment method using Docker and Docker Compose.
+
+**Assumptions:**
+
+*   Docker and Docker Compose are installed on the host machine (`sudo apt install docker.io docker-compose-v2`).
+*   The user running Docker commands belongs to the `docker` group (`sudo usermod -aG docker $USER`, then log out/in) or uses `sudo`.
+*   You have cloned the repository locally.
+*   A `server/.env` file exists containing at least the `SECRET_KEY`.
+*   An up-to-date `server/requirements.txt` file exists, including `gunicorn`.
+
+### 6.1. Dockerfile Setup
+
+This deployment uses three key files for container definition:
+
+1.  **`client/Dockerfile`:** Defines a multi-stage build process for the React client. It first builds the static assets using Node.js and then copies these assets into a lightweight Nginx image for serving.
+2.  **`server/Dockerfile`:** Defines the environment for the Flask backend. It installs Python, copies the application code, installs dependencies from `requirements.txt`, and sets up Gunicorn as the WSGI server.
+3.  **`client/nginx.conf`:** This configuration file is used by the Nginx server within the `client` container. It tells Nginx how to serve the built React files and how to reverse proxy API requests (like `/login`, `/review`, etc.) to the `server` container.
+
+*(These files should exist in your repository if generated previously. Refer to their contents for details.)*
+
+### 6.2. Docker Compose Configuration
+
+The `docker-compose.yml` file orchestrates the building and running of the containers:
+
+```yaml
+# docker-compose.yml (Project Root)
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: flashcard_server
+    volumes:
+      # Mount the server code directory from host into the container at /app
+      # This allows the container to run the code AND provides host access
+      # to the code, admin.db, and user_dbs/ directory.
+      - ./server:/app
+    env_file:
+      # Load environment variables (like SECRET_KEY) from this file
+      - ./server/.env
+    expose:
+      # Expose port 8000 internally for Nginx, but not to the host
+      - "8000"
+    restart: unless-stopped
+    networks:
+      - flashcard-net
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: flashcard_client
+    ports:
+      # Map host port 80 to container port 80 (Nginx)
+      - "80:80"
+      # If using SSL/HTTPS, you might map 443 instead and configure Nginx for SSL.
+      # - "443:80"
+    depends_on:
+      - server # Ensure server starts before client
+    restart: unless-stopped
+    networks:
+      - flashcard-net
+
+networks:
+  flashcard-net:
+    driver: bridge
+```
+
+**Key Points:**
+
+*   **`server` service:** Builds from `server/Dockerfile`, names the container, mounts the *entire* `./server` directory from the host to `/app` inside the container, loads environment variables from `server/.env`, and exposes port 8000 internally on the `flashcard-net` network.
+*   **`client` service:** Builds from `client/Dockerfile`, names the container, maps port 80 on the host to port 80 (Nginx) in the container, and depends on the `server` service.
+*   **Volumes (`./server:/app`):** This is the crucial part for host access. Because the entire `./server` directory is mounted into the container's `/app` directory:
+    *   The Python code (`/app/app.py`) is accessible to the container.
+    *   The admin database (`/app/admin.db`) is directly using the `./server/admin.db` file from the host.
+    *   The user databases directory (`/app/user_dbs/`) is directly using the `./server/user_dbs/` directory from the host.
+    *   Any changes made *inside* the container to files within `/app` (like database writes) are reflected immediately on the host, and vice-versa (though changing code might require a container restart unless using Flask's debug mode, which is NOT recommended for production).
+*   **SQLite Container:** Note that there is no separate SQLite container. SQLite works directly with database files, which are made available to the `server` container via the volume mount.
+
+### 6.3. Building and Running
+
+1.  **Navigate:** Open your terminal in the project root directory (`flashcard-app-v5-anki-gemini`) where `docker-compose.yml` is located.
+2.  **Ensure Prerequisites:**
+    *   Confirm `server/requirements.txt` is up-to-date.
+    *   Confirm `server/.env` exists and contains `SECRET_KEY=your_actual_secret_key`.
+    *   If `admin.db` doesn't exist, you might need to initialize it once. The application *should* create it on first run/login attempt due to `init_admin_db()` calls, but manual creation might be needed depending on permissions.
+3.  **Build Images:**
+    ```bash
+    docker compose build
+    ```
+4.  **Start Services:**
+    ```bash
+    # Start in detached mode (runs in background)
+    docker compose up -d
+    ```
+5.  **Verify:**
+    *   Check running containers: `docker compose ps`
+    *   View logs: `docker compose logs -f` (or `docker compose logs server`, `docker compose logs client`)
+    *   Access the application in your browser via the host's IP address or domain name (on port 80).
+
+### 6.4. Stopping
+
+```bash
+docker compose down
+```
+
+This stops and removes the containers but leaves the volumes (database files and code on the host) intact.
+
+### 6.5. Production Considerations
+
+*   **Permissions:** The host directory `./server` (and its contents like `admin.db`, `user_dbs`) must be readable and writable by the user ID that the `server` container process runs as (defined in `server/Dockerfile` or default). Docker volumes can sometimes have permission issues; ensure the host directory permissions are compatible.
+*   **SSL/HTTPS:** The provided `client/nginx.conf` uses HTTP (port 80). For production, you should enable HTTPS. Common methods include:
+    *   Using a separate Nginx instance on the *host* as a primary reverse proxy that handles SSL termination and proxies requests to `localhost:80` (where the `client` container is mapped).
+    *   Integrating Certbot directly into the `client` container's Nginx setup (more complex, requires volume mounts for certificates).
+*   **Database Backups:** Since the database files reside directly on the host filesystem (`./server/admin.db`, `./server/user_dbs/`), standard filesystem backup procedures should be used to back them up regularly.
+*   **Resource Limits:** Configure resource limits (CPU, memory) for your containers in the `docker-compose.yml` file if necessary.
+
+### 6.6 Docker References
+
+For further details on Docker and Docker Compose:
+
+*   **Docker Overview:** [https://docs.docker.com/get-started/overview/](https://docs.docker.com/get-started/overview/)
+*   **Docker Compose Overview:** [https://docs.docker.com/compose/](https://docs.docker.com/compose/)
+*   **Dockerfile Reference:** [https://docs.docker.com/engine/reference/builder/](https://docs.docker.com/engine/reference/builder/)
+*   **Docker Compose File Reference:** [https://docs.docker.com/compose/compose-file/](https://docs.docker.com/compose/compose-file/)
+*   **Dockerizing Python Applications:** [https://docs.docker.com/language/python/](https://docs.docker.com/language/python/)
+*   **Nginx Docker Image:** [https://hub.docker.com/_/nginx](https://hub.docker.com/_/nginx)
+*   **Node.js Docker Image:** [https://hub.docker.com/_/node](https://hub.docker.com/_/node)
+
 ---
 
 This guide provides a solid foundation. Depending on your specific needs, you might need further configuration for database backups, more advanced logging, security hardening, etc. 
