@@ -445,4 +445,121 @@ For further details on Docker and Docker Compose:
 
 ---
 
-This guide provides a solid foundation. Depending on your specific needs, you might need further configuration for database backups, more advanced logging, security hardening, etc. 
+This guide provides a solid foundation. Depending on your specific needs, you might need further configuration for database backups, more advanced logging, security hardening, etc.
+
+# Production Deployment Notes
+
+This document outlines key considerations and steps for deploying the application to a production environment, especially when running behind a reverse proxy with a subpath.
+
+## 7. Managing Development vs. Production Configuration
+
+To handle differences between local development and production deployment (particularly when deploying to a subpath like `/javumbo/` behind a reverse proxy), we use environment variables managed by Vite. This avoids manual code changes for deployment.
+
+### Strategy: `.env` Files
+
+We utilize `.env` files in the root of the `/client` directory:
+
+*   **`.env.development`**: Settings used when running `npm run dev`.
+*   **`.env.production`**: Settings used when running `npm run build`.
+*   **`.env`**: (Optional) Default settings overridden by the specific environment files.
+
+**Important**: Variables exposed to the client-side browser code **must** be prefixed with `VITE_`.
+
+### Example `.env` Files
+
+**`/client/.env.development`**:
+```dotenv
+# Development settings (running locally, no subpath)
+VITE_APP_BASE_PATH=/
+# Point directly to the local Flask/Gunicorn dev server
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+**`/client/.env.production`**:
+```dotenv
+# Production settings (deployed under /javumbo/)
+VITE_APP_BASE_PATH=/javumbo/
+# API calls go through the reverse proxy, relative to the base path
+# Use '/javumbo' if Axios baseURL needs it, or '' if using root-relative paths like '/register'.
+VITE_API_BASE_URL=/javumbo
+```
+
+### Configuration Points Modified by Environment Variables
+
+1.  **Vite Build Base Path (`client/vite.config.js`)**
+
+    The `base` option in `vite.config.js` tells Vite the public path where assets will be served from. This needs to match the subpath in production. It reads from `process.env`.
+
+    ```javascript
+    // vite.config.js
+    import { defineConfig } from 'vite';
+    import react from '@vitejs/plugin-react';
+
+    export default defineConfig(({ mode }) => {
+      // Vite loads .env variables into process.env based on mode
+      const appBasePath = process.env.VITE_APP_BASE_PATH || '/';
+
+      return {
+        plugins: [react()],
+        // Use the environment variable for the base path
+        base: appBasePath,
+      };
+    });
+    ```
+
+2.  **React Router Base Name (`client/src/main.jsx`)**
+
+    The `<BrowserRouter>` needs its `basename` prop set to the application's subpath so routing works correctly. It reads from `import.meta.env`.
+
+    ```javascript
+    // src/main.jsx
+    import React from 'react';
+    import ReactDOM from 'react-dom/client';
+    import { BrowserRouter } from 'react-router-dom';
+    import App from './App';
+    import './index.css';
+
+    // Access the environment variable (exposed via import.meta.env)
+    const appBasePath = import.meta.env.VITE_APP_BASE_PATH || '/';
+
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <React.StrictMode>
+        <BrowserRouter basename={appBasePath}>
+          <App />
+        </BrowserRouter>
+      </React.StrictMode>
+    );
+    ```
+
+3.  **API Base URL (`client/src/api/axiosConfig.js`)**
+
+    Axios needs to know where to send API requests. In development, it might be `http://localhost:8000`; in production, requests should typically be relative to the application's origin so they go through the reverse proxy. It reads from `import.meta.env`.
+
+    ```javascript
+    // src/api/axiosConfig.js
+    import axios from 'axios';
+
+    // Access the environment variable
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+
+    const api = axios.create({
+      // Use the environment variable for the baseURL
+      baseURL: apiBaseUrl,
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+    });
+
+    // ... rest of Axios config ...
+
+    export default api;
+    ```
+
+### Workflow Summary
+
+*   Develop locally using `npm run dev`. `.env.development` settings are used.
+*   When ready for deployment, run `npm run build`. `.env.production` settings are automatically used to create the production-ready bundles in the `dist` directory with the correct base paths and API URLs embedded.
+*   Deploy the contents of the `client/dist` directory to the upstream server (`10.x.y.z` in the example) to be served by its Nginx instance.
+*   Ensure the main reverse proxy (`example.com`) correctly forwards requests for the production subpath (e.g., `/javumbo/`) to the upstream server. 
