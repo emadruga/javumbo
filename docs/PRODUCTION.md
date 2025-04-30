@@ -209,7 +209,79 @@ Nginx will serve the static React files and forward API requests to the Gunicorn
 
 ### 5.1. Create Nginx Server Block
 
-Create a new Nginx configuration file for your site:
+If you need to run nginx from the command line, a more complete 
+config file is needed:
+
+```nginx
+# Mandatory events block (top-level)
+events {
+    worker_connections 1024; # Example value, adjust as needed
+}
+
+http {
+    # Optional: Include mime types for handling different file extensions
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    # Optional: Basic settings like logging formats, keepalive, etc.
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                       '$status $body_bytes_sent "$http_referer" '
+                       '"$http_user_agent" "$http_x_forwarded_for"';
+    #access_log  /var/log/nginx/access.log  main;
+    access_log  ./access.log  main;
+    error_log   ./error.log;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    # Your server block goes INSIDE the http block
+    server {
+        listen 8080;
+        # Replace with your domain name or server IP address
+        server_name localhost;
+
+        # Root directory for React build files - MAKE SURE THIS PATH IS CORRECT on your server
+        root /home/emadruga/proj/javumbo/client/dist;
+        index index.html;
+
+        location / {
+            # Try to serve file directly, fallback to index.html for React Router
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Proxy API requests to the Gunicorn backend
+        # Match all API paths used by the frontend
+        location ~ ^/(login|logout|register|decks|review|answer|export|add_card|cards) {
+            proxy_pass http://127.0.0.1:8000; # Match Gunicorn bind address
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Optional: Add locations for specific static assets if needed,
+        # although the root directive usually handles this.
+        # location ~* \.(css|js|png|jpg|jpeg|gif|ico)$ {
+        #     expires 1d;
+        #     add_header Cache-Control "public";
+        # }
+    }
+
+    # You can add other server blocks here if needed
+    # server {
+    #     listen 443 ssl;
+    #     ...
+    # }
+}
+
+```
+
+If all is well in command line tests, create a new Nginx configuration
+file for your site:
 
 ```bash
 sudo nano /etc/nginx/sites-available/flashcard-app
@@ -276,6 +348,12 @@ sudo nginx -t
 
 If the test is successful, restart Nginx:
 
+If you need to run from command line first:
+```bash
+sudo nginx -c ./nginx.conf -p `pwd`
+```
+
+After everything seems ok:
 ```bash
 sudo systemctl restart nginx
 ```
