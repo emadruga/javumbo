@@ -78,8 +78,6 @@ Create a `.env` file in the `server` directory:
 # server/.env
 SECRET_KEY='your_strong_random_secret_key_here'
 # Add other environment variables if needed (e.g., DATABASE_URL if configured)
-# Base path as defined in the reverse proxy (nginx)
-VITE_APP_BASE_PATH=/javumbo/
 ```
 
 Generate a strong secret key (e.g., using `python -c 'import secrets; print(secrets.token_hex(24))'`).
@@ -130,7 +128,7 @@ Ensure Gunicorn can serve the app. From the `server` directory (with `venv` acti
 source venv/bin/activate
 # Test run (replace 'app:app' if your Flask instance variable or filename is different)
 # This binds to localhost:8000
-gunicorn --workers 3 --bind 127.0.0.1:8000 app:app
+gunicorn --workers 3 --bind 127.0.0.1:8000 --access-logfile ./access.log --error-logfile ./error.log  app:app
 ```
 
 Press `CTRL+C` to stop. Ensure no errors appear.
@@ -163,7 +161,7 @@ WorkingDirectory=/path/to/flashcard-app-v5-anki-gemini/server
 
 # Command to execute
 # Make sure the path to gunicorn (within the venv) and app:app are correct
-ExecStart=/path/to/flashcard-app-v5-anki-gemini/server/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 app:app
+ExecStart=/path/to/flashcard-app-v5-anki-gemini/server/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 app:app 
 
 Restart=always
 
@@ -193,7 +191,18 @@ Navigate to the client directory and build the production assets:
 ```bash
 # Navigate to the client directory
 cd ../client # Assuming you are in the server directory
+```
 
+Create a `.env` file in the `server` directory:
+
+```plaintext
+# Base path as defined in the reverse proxy (nginx)
+VITE_APP_BASE_PATH=/javumbo/
+```
+
+Build the client code:
+
+```bash
 # Install dependencies (including React, Router, Axios, Chart.js, etc.)
 npm install
 
