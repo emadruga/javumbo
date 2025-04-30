@@ -78,6 +78,8 @@ Create a `.env` file in the `server` directory:
 # server/.env
 SECRET_KEY='your_strong_random_secret_key_here'
 # Add other environment variables if needed (e.g., DATABASE_URL if configured)
+# Base path as defined in the reverse proxy (nginx)
+VITE_APP_BASE_PATH=/javumbo/
 ```
 
 Generate a strong secret key (e.g., using `python -c 'import secrets; print(secrets.token_hex(24))'`).
