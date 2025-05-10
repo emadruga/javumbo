@@ -38,13 +38,9 @@ if not SECRET_KEY:
 
 # Get the directory where app.py resides
 basedir = os.path.abspath(os.path.dirname(__file__))
-# print(f"Base directory detected: {basedir}") # Replaced by logger
 
 # --- Configuration ---
-#PORT = 8000
-#ADMIN_DB_PATH = os.path.join(basedir, 'admin.db') # Path relative to app.py
 FLASHCARD_DB_PATH = 'flashcards.db' # We will create user-specific DBs later, this is a placeholder
-#SECRET_KEY = os.urandom(24) # For session management
 EXPORT_DIR = os.path.join(basedir, 'exports') # Path relative to app.py
 DAILY_NEW_LIMIT = 20 # Maximum number of new cards to introduce per day per user
 
