@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, session, send_file
 from flask_cors import CORS
+from flask_session import Session # Import the Session extension
 import sqlite3
 import bcrypt
 import os
@@ -15,22 +16,61 @@ import traceback # Keep for explicit exception logging if needed
 import datetime # Import datetime
 from functools import wraps
 
-# Get the directory where app.py resides
+# Add near the top of server/app.py
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
 basedir = os.path.abspath(os.path.dirname(__file__))
-# print(f"Base directory detected: {basedir}") # Replaced by logger
 
 # --- Configuration ---
-PORT = 8000
-ADMIN_DB_PATH = os.path.join(basedir, 'admin.db') # Path relative to app.py
+PORT = 8000 # Port Gunicorn will listen on internally
+ADMIN_DB_PATH = os.path.join(basedir, 'admin.db')
+# ... other paths ...
+SECRET_KEY = os.getenv('SECRET_KEY') # Load from environment
+# Ensure SECRET_KEY is loaded, otherwise raise an error or use a default only for non-production
+if not SECRET_KEY:
+    # In production, this should ideally fail hard
+    raise ValueError("No SECRET_KEY set for Flask application")
+
+
+# Get the directory where app.py resides
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# --- Configuration ---
 FLASHCARD_DB_PATH = 'flashcards.db' # We will create user-specific DBs later, this is a placeholder
-SECRET_KEY = os.urandom(24) # For session management
 EXPORT_DIR = os.path.join(basedir, 'exports') # Path relative to app.py
 DAILY_NEW_LIMIT = 20 # Maximum number of new cards to introduce per day per user
 
 # --- App Initialization ---
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
-CORS(app, supports_credentials=True) # Allow cross-origin requests, necessary for React dev server
+CORS(app, supports_credentials=True,
+    origins=["https://cibernetica.inmetro.gov.br"]) # Allow cross-origin requests, necessary for React dev server
+
+
+# --- Configure Flask-Session ---
+# Choose a directory for session files (must be writable by the Gunicorn user)
+# Ensure this directory exists or is created
+SESSION_FILE_DIR = os.path.join(basedir, 'flask_session') 
+if not os.path.exists(SESSION_FILE_DIR):
+    os.makedirs(SESSION_FILE_DIR) # Create the directory if it doesn't exist
+
+app.config['SESSION_TYPE'] = 'filesystem' # Use filesystem-based sessions
+app.config['SESSION_FILE_DIR'] = SESSION_FILE_DIR
+app.config['SESSION_PERMANENT'] = False # Or True with SESSION_LIFETIME if needed
+app.config['SESSION_USE_SIGNER'] = True # Sign the session ID cookie
+app.config['SESSION_COOKIE_SECURE'] = True # Important for HTTPS!
+app.config['SESSION_COOKIE_HTTPONLY'] = True # Recommended
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' # Usually 'Lax' or 'Strict'
+app.config['SESSION_COOKIE_PATH'] = '/' # Ensure cookie is sent for all paths
+
+# Initialize the Session extension AFTER setting the config
+server_session = Session(app) 
+# -----------------------------
+
 
 # --- Logging Configuration ---
 # Configure basic logging

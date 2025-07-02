@@ -9,6 +9,15 @@
     "password": "Contraseña:",
     "confirmPassword": "Confirmar Contraseña:",
     "email": "Correo electrónico:",
+    "emailPlaceholder": "Ingrese su correo electrónico",
+    "groupCode": "Grupo de Interés:",
+    "groupCodePlaceholder": "Seleccione su grupo",
+    "groups": {
+                "group30": "Biotecnología",
+                "group40": "Metrología",
+                "group50": "Ciberseguridad",
+                "group255": "Otros Intereses"
+    },
     "loginButton": "Iniciar Sesión",
     "registerButton": "Registrarse",
     "loggingIn": "Iniciando sesión...",
