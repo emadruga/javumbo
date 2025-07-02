@@ -270,6 +270,25 @@ function DecksPage({ user, onLogout }) {
     setOpenDropdownId(openDropdownId === deckId ? null : deckId);
   };
   
+  // Function to add a card to a specific deck
+  const handleAddCard = async (deckId, deckName) => {
+    setError('');
+    try {
+      // Set the current deck
+      await api.put('/decks/current', { deckId });
+      // Store deck name for AddCardPage
+      localStorage.setItem('currentDeckName', deckName);
+      // Navigate to the add card page
+      navigate('/add');
+    } catch (err) {
+      console.error("Error setting current deck:", err);
+      setError(t('decks.errorSelectingDeck'));
+      if (err.response?.status === 401) {
+        onLogout();
+      }
+    }
+  };
+
   // Function to handle dropdown menu item clicks
   const handleDropdownAction = async (e, action, deck) => {
     e.stopPropagation(); // Prevent event from bubbling up
@@ -290,7 +309,7 @@ function DecksPage({ user, onLogout }) {
         handleDeckRenameClick(deck.id, deck.name);
         break;
       case 'addCard':
-        navigate(`/decks/${deck.id}/cards/new`);
+        handleAddCard(deck.id, deck.name);
         break;
       case 'delete':
         handleDeckDeleteClick(deck.id, deck.name);
@@ -689,6 +708,12 @@ function DecksPage({ user, onLogout }) {
                           onClick={(e) => handleDropdownAction(e, 'rename', deck)}
                         >
                           {t('decks.rename')}
+                        </button>
+                        <button 
+                          style={{...dropdownItemStyle, color: '#007bff'}}
+                          onClick={(e) => handleDropdownAction(e, 'addCard', deck)}
+                        >
+                          {t('cards.add')}
                         </button>
                         <button 
                           style={{...dropdownItemStyle, color: '#dc3545'}}

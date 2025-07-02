@@ -47,8 +47,7 @@ DAILY_NEW_LIMIT = 20 # Maximum number of new cards to introduce per day per user
 # --- App Initialization ---
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
-CORS(app, supports_credentials=True,
-    origins=["https://cibernetica.inmetro.gov.br"]) # Allow cross-origin requests, necessary for React dev server
+CORS(app, supports_credentials=True, origins=["http://localhost:5173", "https://cibernetica.inmetro.gov.br"]) # Allow cross-origin requests, necessary for React dev server
 
 
 # --- Configure Flask-Session ---

@@ -70,43 +70,24 @@ pip install -r requirements.txt
 
 ### 3.3. Configure Environment Variables
 
-Flask needs a `SECRET_KEY`. It's best practice to set this via environment variables rather than hardcoding it.
+The Flask backend requires a `SECRET_KEY` for session management. This is a critical security setting. The application is configured to load this key from a `.env` file in the `server` directory using the `python-dotenv` package.
 
-Create a `.env` file in the `server` directory:
+**Action Required:**
+
+Create a file named `.env` inside the `/server` directory:
 
 ```plaintext
 # server/.env
 SECRET_KEY='your_strong_random_secret_key_here'
-# Add other environment variables if needed (e.g., DATABASE_URL if configured)
 ```
 
-Generate a strong secret key (e.g., using `python -c 'import secrets; print(secrets.token_hex(24))'`).
+-   **Generate a Key**: You can generate a strong, random key using Python's `secrets` module. Run this command in your terminal and copy the output into the file:
+    ```bash
+    python3 -c 'import secrets; print(secrets.token_hex(24))'
+    ```
+-   **`.gitignore`**: The `server/.gitignore` file should include `.env` to prevent this sensitive file from being committed to version control.
 
-Modify `server/app.py` slightly to load this if using `python-dotenv`:
-
-```python
-# Add near the top of server/app.py
-from dotenv import load_dotenv
-import os
-
-# Load environment variables from .env file
-load_dotenv()
-
-basedir = os.path.abspath(os.path.dirname(__file__))
-
-# --- Configuration ---
-PORT = 8000 # Port Gunicorn will listen on internally
-ADMIN_DB_PATH = os.path.join(basedir, 'admin.db')
-# ... other paths ...
-SECRET_KEY = os.getenv('SECRET_KEY') # Load from environment
-# Ensure SECRET_KEY is loaded, otherwise raise an error or use a default only for non-production
-if not SECRET_KEY:
-    # In production, this should ideally fail hard
-    raise ValueError("No SECRET_KEY set for Flask application")
-# ... rest of the app ...
-```
-
-*(Alternatively, set environment variables directly in the systemd service file.)*
+This setup ensures that the key is available for both local development (running `python app.py`) and production deployments (running with Gunicorn).
 
 ### 3.4. Initialize Database
 
