@@ -161,7 +161,7 @@ WorkingDirectory=/path/to/flashcard-app-v5-anki-gemini/server
 
 # Command to execute
 # Make sure the path to gunicorn (within the venv) and app:app are correct
-ExecStart=/path/to/flashcard-app-v5-anki-gemini/server/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 app:app 
+ExecStart=/path/to/flashcard-app-v5-anki-gemini/server/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 --access-logfile /var/log/flashcard-app/access.log --error-logfile /var/log/flashcard-app/error.log app:app 
 
 Restart=always
 
@@ -180,6 +180,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable flashcard-app.service
 sudo systemctl start flashcard-app.service
 sudo systemctl status flashcard-app.service # Check for errors
+sudo journalctl -u flashcard-app
 ```
 
 ## 4. Frontend (React) Deployment
@@ -300,7 +301,7 @@ Paste the following configuration, adjusting `server_name` and paths:
 
 ```nginx
 server {
-    listen 80;
+    listen 8080;
     # Replace with your domain name or server IP address
     server_name your_domain.com www.your_domain.com;
 
@@ -365,6 +366,8 @@ sudo nginx -c ./nginx.conf -p `pwd`
 After everything seems ok:
 ```bash
 sudo systemctl restart nginx
+sudo systemctl status nginx
+sudo journalctl -u nginx
 ```
 
 ## 6. Configure Firewall
