@@ -39,7 +39,7 @@ The server utilizes two distinct SQLite database schemas:
     -   *See: `docs/REST_API.md`*
 -   **Spaced Repetition (SM-2)**: The card review scheduling logic is based on the SuperMemo-2 (SM-2) algorithm. The implementation is adapted to use deck-specific configuration parameters for calculating review intervals, similar to Anki's approach.
     -   *See: `docs/SUPERMEMO-2.md`*
--   **Repository Pattern**: The codebase is being refactored to use the Repository pattern to abstract database interactions, separating data access logic from the main application logic. This will improve modularity and testability.
+-   **Repository Pattern**: The codebase is being refactored to use the Repository pattern to abstract database interactions, separating data access logic from the main application logic.
     -   *See: `docs/REPO_PATTERN.md` and `docs/TODO.md`*
 
 ---
@@ -145,3 +145,64 @@ The project includes a suite of unit tests for the backend API to ensure reliabi
     *   In the JSX of `client/src/pages/DecksPage.jsx`, add a new `<button>` element inside the dropdown menu.
     *   This button will be labeled "Add Card" (using the `t('cards.add')` translation key).
     *   The `onClick` handler for this button will call `handleDropdownAction` with the `'addCard'` action.
+
+---
+
+## Troubleshooting Session Log (July 2, 2025)
+
+This section logs the troubleshooting steps and findings related to deploying the Flask backend with Gunicorn and systemd, specifically addressing the `status=216/GROUP` error and related issues.
+
+**Initial Problem:**
+Service failed to start with `status=216/GROUP`.
+
+**Troubleshooting Steps & Findings:**
+
+1.  **Initial Diagnosis (from `systemctl status`):**
+    *   Error: `Failed to determine group credentials: No such file or directory`
+    *   Indicated `Group=www-data` in service file might not exist.
+
+2.  **Service File Review:**
+    *   `User=emadruga`, `Group=www-data`
+    *   Proposed change: `Group=emadruga` (to match existing user's primary group).
+
+3.  **Log Directory Permissions Check:**
+    *   `ls -ld /var/log/flashcard-app-teste/` showed `drwxr-xr-x 2 root root ...`
+    *   **Finding:** Log directory owned by `root`, not writable by `emadruga`.
+    *   **Action:** `sudo chown -R emadruga:emadruga /var/log/flashcard-app-teste/`
+
+4.  **Environment Variable (`SECRET_KEY`) Check:**
+    *   `app.py` loads `SECRET_KEY` from `.env`.
+    *   `cat /opt/flashcard-app-teste/javumbo/server/.env` confirmed `SECRET_KEY` was present.
+    *   **Action:** Added `EnvironmentFile=/opt/flashcard-app-teste/javumbo/server/.env` to service file to ensure `systemd` loads it.
+
+5.  **Manual Gunicorn Execution Test:**
+    *   `cd /opt/flashcard-app-teste/javumbo/server`
+    *   `/opt/flashcard-app-teste/javumbo/server/javumbo-teste-venv/bin/gunicorn ... app:app`
+    *   **Finding:** Gunicorn started successfully and did not crash, indicating the application code itself was not the immediate problem when run manually. This suggested a `systemd` environment issue.
+
+6.  **Flask Application Naming Conflict (Hypothesis):**
+    *   User noted an older production app on the same server.
+    *   **Hypothesis:** `Flask(__name__)` might cause a naming conflict for session/cache resources if both apps use the same default name, leading to a crash when `systemd` tries to start the second instance.
+    *   **Proposed Action:** Change `app = Flask(__name__)` to `app = Flask("flashcard-app-teste")` in `server/app.py`. (This change was proposed but not yet confirmed as implemented or tested).
+
+7.  **Virtual Environment Interpreter Path Issue (Root Cause Identified):**
+    *   `journalctl` output showed: `Failed at step GROUP spawning /opt/flashcard-app-teste/javumbo/server/javumbo-teste-venv/bin/gunicorn: No such file or directory`
+    *   `ls -l /opt/flashcard-app-teste/javumbo/server/javumbo-teste-venv/bin/gunicorn` confirmed `gunicorn` existed.
+    *   `head -n 1 /opt/flashcard-app-teste/javumbo/server/javumbo-teste-venv/bin/gunicorn` revealed: `#!/opt/flashcard-app-teste/javumbo/server/javumbo-teste-venv/bin/python3.12`
+    *   `ls -la /opt/flashcard-app-teste/javumbo/server/javumbo-teste-venv/bin/python3.12` showed a symbolic link: `-> /home/emadruga/.conda/envs/teste12/bin/python3.12`
+    *   **Critical Finding:** The virtual environment's Python interpreter was symlinked to a Conda environment inside the user's home directory (`/home/emadruga/.conda/...`). `systemd` services, even when running as the user, are typically restricted from accessing files within `/home/user` for security reasons. This restriction causes `systemd` to report "No such file or directory" when it tries to follow the symlink into the restricted area.
+
+8.  **Final Solution (Proposed):**
+    *   **Recreate the virtual environment** directly within the project directory (`/opt/flashcard-app-teste/javumbo/server/javumbo-teste-venv`) on the `maracana` server. This ensures all internal paths point to locations accessible by `systemd` and are self-contained.
+    *   Commands:
+        ```bash
+        cd /opt/flashcard-app-teste/javumbo/server
+        rm -rf javumbo-teste-venv
+        python3 -m venv javumbo-teste-venv
+        source javumbo-teste-venv/bin/activate
+        pip install -r requirements.txt
+        ```
+    *   After recreation, restart the `systemd` service.
+
+**Next Steps:**
+The user will execute the virtual environment recreation steps and then attempt to start the `systemd` service.
