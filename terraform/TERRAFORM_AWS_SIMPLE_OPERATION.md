@@ -84,8 +84,17 @@ ssh -i ~/.ssh/id_rsa ubuntu@<instance_public_ip>
 # Check if user-data script is still running
 tail -f /var/log/cloud-init-output.log
 
-# Look for this line at the end:
+# Look for these lines at the end:
 # "JAVUMBO deployment complete!"
+# "End time: Tue Nov  5 01:23:45 UTC 2025"
+
+# Check deployment times to calculate duration
+grep -E "(Start time|End time)" /var/log/cloud-init-output.log
+
+# Example output:
+# Start time: Tue Nov  5 01:15:23 UTC 2025
+# End time: Tue Nov  5 01:23:45 UTC 2025
+# (Duration: ~8 minutes)
 
 # Check for errors
 grep -i error /var/log/cloud-init-output.log
@@ -575,6 +584,19 @@ terraform init
 ---
 
 ## Quick Reference Commands
+
+### Deployment Status Check
+
+```bash
+# Check deployment completion and duration
+ssh -i ~/.ssh/id_rsa ubuntu@$(terraform output -raw instance_public_ip) \
+  "grep -E '(Start time|End time|deployment complete)' /var/log/cloud-init-output.log"
+
+# Expected output:
+# Start time: Tue Nov  5 01:15:23 UTC 2025
+# JAVUMBO deployment complete!
+# End time: Tue Nov  5 01:23:45 UTC 2025
+```
 
 ### Daily Operations
 

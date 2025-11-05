@@ -158,7 +158,10 @@ resource "aws_instance" "javumbo" {
               exec > >(tee /var/log/user-data.log)
               exec 2>&1
 
+              echo "=========================================="
               echo "Starting JAVUMBO deployment..."
+              echo "Start time: $(date)"
+              echo "=========================================="
 
               # Update system
               apt-get update
@@ -189,7 +192,16 @@ resource "aws_instance" "javumbo" {
               docker compose build
               docker compose up -d
 
+              echo "=========================================="
               echo "JAVUMBO deployment complete!"
+              echo "End time: $(date)"
+              echo "=========================================="
+              echo ""
+              echo "Deployment Summary:"
+              echo "- Application URL: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
+              echo "- Instance ID: $(curl -s http://169.254.169.254/latest/meta-data/instance-id)"
+              echo "- Container status:"
+              docker compose ps
               EOF
 
   tags = {
