@@ -461,51 +461,146 @@ sudo docker exec flashcard_client wget -O- http://server:8000/
 
 ---
 
-## Stopping Services
+## Pausing/Stopping Services
 
-### Stop Containers (Keep Instance Running)
+You have three options for pausing the deployment, each with different cost and convenience trade-offs.
+
+### Option 1: Stop EC2 Instance (Recommended for Long Pauses)
+
+**Best for:** Days to weeks of inactivity
+**Cost while paused:** ~$2.40/month (storage only)
+**Resume time:** ~2 minutes
+**Data preserved:** ✅ Yes
+**IP address:** ⚠️ Changes
+
+```bash
+# From local machine in terraform directory
+cd terraform
+
+# Get instance ID and stop it
+INSTANCE_ID=$(terraform output -raw instance_id)
+aws ec2 stop-instances --instance-ids $INSTANCE_ID
+
+# Check status
+aws ec2 describe-instances --instance-ids $INSTANCE_ID \
+  --query 'Reservations[0].Instances[0].State.Name' --output text
+# Output: stopping -> stopped
+```
+
+**To resume:**
+```bash
+# Start instance
+aws ec2 start-instances --instance-ids $INSTANCE_ID
+
+# Wait for it to start
+aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+
+# Refresh Terraform state to get new public IP
+terraform refresh
+
+# Get new IP address
+terraform output instance_public_ip
+NEW_IP=$(terraform output -raw instance_public_ip)
+
+# Test application
+curl http://$NEW_IP
+```
+
+**Note:** The public IP address **will change** after stop/start. You'll need to use the new IP to access the application.
+
+---
+
+### Option 2: Stop Docker Containers Only (Quick Pause)
+
+**Best for:** Hours to a few days
+**Cost while paused:** ~$11/month (full instance cost)
+**Resume time:** ~10 seconds
+**Data preserved:** ✅ Yes
+**IP address:** ✅ Stays the same
 
 ```bash
 # SSH into instance
-ssh -i ~/.ssh/id_rsa ubuntu@<instance_public_ip>
+ssh -i ~/.ssh/id_rsa ubuntu@$(terraform output -raw instance_public_ip)
 
+# Stop containers
 cd /home/ubuntu/javumbo
-
-# Stop all containers
 sudo docker compose down
 
 # Verify containers stopped
 sudo docker compose ps
-sudo docker ps -a
+# Output: (empty - no containers running)
 ```
 
-**To restart later:**
+**To resume:**
 ```bash
+# SSH into instance
+ssh -i ~/.ssh/id_rsa ubuntu@<instance_public_ip>
+
+# Start containers
+cd /home/ubuntu/javumbo
 sudo docker compose up -d
+
+# Verify they're running
+sudo docker compose ps
 ```
 
-### Stop EC2 Instance (from local machine)
+**Advantage:** Same IP address, instant resume, data preserved
+**Disadvantage:** Still paying for the running EC2 instance
 
+---
+
+### Option 3: Destroy Everything (Complete Removal)
+
+**Best for:** Finished with the deployment
+**Cost while paused:** $0
+**Restore time:** ~10 minutes (full redeployment)
+**Data preserved:** ❌ No - everything deleted
+**IP address:** ❌ New instance, new IP
+
+See [Destroying Infrastructure](#destroying-infrastructure) section below.
+
+---
+
+### Comparison Table
+
+| Method | Monthly Cost | Resume Time | Data Safe | Same IP | Use When |
+|--------|-------------|-------------|-----------|---------|----------|
+| **Stop Instance** | ~$2.40 | 2 min | ✅ | ❌ | Long pause (days/weeks) |
+| **Stop Containers** | ~$11 | 10 sec | ✅ | ✅ | Short pause (hours/days) |
+| **Destroy** | $0 | 10 min | ❌ | ❌ | Done with deployment |
+
+---
+
+### Recommended Pause Workflows
+
+**For overnight/weekend pause:**
 ```bash
-# Get instance ID
+# Quick pause - stop containers only
+ssh -i ~/.ssh/id_rsa ubuntu@$(terraform output -raw instance_public_ip) \
+  "cd /home/ubuntu/javumbo && sudo docker compose down"
+
+# Resume next day
+ssh -i ~/.ssh/id_rsa ubuntu@<same_ip> \
+  "cd /home/ubuntu/javumbo && sudo docker compose up -d"
+```
+
+**For week-long pause:**
+```bash
+# Stop instance to save costs
 cd terraform
-terraform output instance_id
+aws ec2 stop-instances --instance-ids $(terraform output -raw instance_id)
 
-# Stop instance (keeps all data, stops billing for compute)
-aws ec2 stop-instances --instance-ids <instance_id>
-
-# Check status
-aws ec2 describe-instances --instance-ids <instance_id> \
-  --query 'Reservations[0].Instances[0].State.Name'
+# Resume next week
+aws ec2 start-instances --instance-ids $(terraform output -raw instance_id)
+terraform refresh
+# Use new IP from: terraform output instance_public_ip
 ```
 
-**To restart:**
+**For permanent shutdown:**
 ```bash
-aws ec2 start-instances --instance-ids <instance_id>
-
-# Get new public IP (may have changed)
-aws ec2 describe-instances --instance-ids <instance_id> \
-  --query 'Reservations[0].Instances[0].PublicIpAddress'
+# Backup first, then destroy
+cd terraform
+terraform destroy
 ```
 
 ---
