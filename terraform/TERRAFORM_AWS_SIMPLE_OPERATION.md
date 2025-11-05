@@ -477,23 +477,32 @@ You have three options for pausing the deployment, each with different cost and 
 # From local machine in terraform directory
 cd terraform
 
-# Get instance ID and stop it
+# Get instance ID and region from Terraform
 INSTANCE_ID=$(terraform output -raw instance_id)
-aws ec2 stop-instances --instance-ids $INSTANCE_ID
+REGION=$(terraform output -json | grep -o '"aws_region"[^}]*' | grep -o 'us-[a-z0-9-]*' | head -1)
+
+# Alternative: Explicitly set region (if above doesn't work)
+REGION="us-east-1"
+
+# Stop the instance (specify region to avoid mismatch)
+aws ec2 stop-instances --region $REGION --instance-ids $INSTANCE_ID
 
 # Check status
-aws ec2 describe-instances --instance-ids $INSTANCE_ID \
+aws ec2 describe-instances --region $REGION --instance-ids $INSTANCE_ID \
   --query 'Reservations[0].Instances[0].State.Name' --output text
 # Output: stopping -> stopped
 ```
 
 **To resume:**
 ```bash
-# Start instance
-aws ec2 start-instances --instance-ids $INSTANCE_ID
+# Start instance (use same region)
+INSTANCE_ID=$(terraform output -raw instance_id)
+REGION="us-east-1"  # Or your deployment region
+
+aws ec2 start-instances --region $REGION --instance-ids $INSTANCE_ID
 
 # Wait for it to start
-aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+aws ec2 wait instance-running --region $REGION --instance-ids $INSTANCE_ID
 
 # Refresh Terraform state to get new public IP
 terraform refresh
@@ -588,10 +597,12 @@ ssh -i ~/.ssh/id_rsa ubuntu@<same_ip> \
 ```bash
 # Stop instance to save costs
 cd terraform
-aws ec2 stop-instances --instance-ids $(terraform output -raw instance_id)
+INSTANCE_ID=$(terraform output -raw instance_id)
+REGION="us-east-1"  # Your deployment region
+aws ec2 stop-instances --region $REGION --instance-ids $INSTANCE_ID
 
 # Resume next week
-aws ec2 start-instances --instance-ids $(terraform output -raw instance_id)
+aws ec2 start-instances --region $REGION --instance-ids $INSTANCE_ID
 terraform refresh
 # Use new IP from: terraform output instance_public_ip
 ```
