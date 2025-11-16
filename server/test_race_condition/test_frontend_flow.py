@@ -16,7 +16,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 
-BASE_URL = "http://54.226.2.146"
+BASE_URL = "http://54.226.152.231"
 PASSWORD = "password123test"
 NUM_USERS = 15  # Start small for frontend flow testing
 CARDS_PER_USER = 20
@@ -49,7 +49,14 @@ def frontend_flow_worker(username, worker_id):
         )
 
         if response.status_code != 200:
-            results["errors"].append(f"Login failed: {response.status_code}")
+            error_msg = f"Login failed: {response.status_code}"
+            try:
+                error_detail = response.json()
+                error_msg += f" - {error_detail}"
+            except:
+                error_msg += f" - {response.text[:100]}"
+            results["errors"].append(error_msg)
+            print(f"  ❌ Worker {worker_id} ({username}): {error_msg}")
             return results
 
         # STEP 2: GET DECKS (like DecksPage.jsx useEffect)
@@ -57,7 +64,14 @@ def frontend_flow_worker(username, worker_id):
         response = session.get(f"{BASE_URL}/decks", timeout=10)
 
         if response.status_code != 200:
-            results["errors"].append(f"Get decks failed: {response.status_code}")
+            error_msg = f"Get decks failed: {response.status_code}"
+            try:
+                error_detail = response.json()
+                error_msg += f" - {error_detail}"
+            except:
+                error_msg += f" - {response.text[:100]}"
+            results["errors"].append(error_msg)
+            print(f"  ❌ Worker {worker_id} ({username}): {error_msg}")
             return results
 
         decks = response.json()
@@ -73,12 +87,19 @@ def frontend_flow_worker(username, worker_id):
         # STEP 3: SET CURRENT DECK (like DecksPage.jsx handleAddCard)
         response = session.put(
             f"{BASE_URL}/decks/current",
-            json={"deck_id": deck_id},
+            json={"deckId": deck_id},  # API expects camelCase
             timeout=10
         )
 
         if response.status_code != 200:
-            results["errors"].append(f"Set current deck failed: {response.status_code}")
+            error_msg = f"Set current deck failed: {response.status_code}"
+            try:
+                error_detail = response.json()
+                error_msg += f" - {error_detail}"
+            except:
+                error_msg += f" - {response.text[:100]}"
+            results["errors"].append(error_msg)
+            print(f"  ❌ Worker {worker_id} ({username}): {error_msg}")
             return results
 
         # STEP 4: ADD CARDS (like AddCardPage.jsx handleSubmit)
@@ -114,7 +135,7 @@ def frontend_flow_worker(username, worker_id):
                     print(f"    ⚠️  Worker {worker_id}: {error_msg}")
 
             # Small delay (simulates user typing/thinking)
-            time.sleep(0.05)  # 50ms
+            time.sleep(2.05)  # 50ms
 
         # STEP 5: VERIFY CARDS APPEAR (like DecksPage.jsx refresh)
         print(f"  Worker {worker_id} ({username}): Verifying cards in deck...")
@@ -194,6 +215,16 @@ def main():
         created = len(result["cards_created"])
         errors = len(result["errors"])
         print(f"  {username}: {created} cards, {errors} errors")
+
+    # Show error details if any
+    if total_errors > 0:
+        print()
+        print("Error details:")
+        for result in results:
+            if result["errors"]:
+                username = result["username"]
+                for error in result["errors"]:
+                    print(f"  {username}: {error}")
 
     # Check for specific issues
     print()

@@ -28,7 +28,7 @@ Thumbs.db
 # Sensitive Data & User-Generated Content
 server/admin.db
 server/user_dbs/
-server/exports/
+server/flask_session/
 
 # Environment variables file (if used later)
 .env*

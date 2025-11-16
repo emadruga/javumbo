@@ -8,10 +8,10 @@ import requests
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-BASE_URL = "http://54.226.2.146"
+BASE_URL = "http://54.226.152.231"
 PASSWORD = "password123test"
 CARDS_PER_USER = 100  # Increased from 50
-DELAY_MS = 1  # Reduced from 10ms - VERY aggressive!
+DELAY_MS = 2000  # Reduced from 10ms - VERY aggressive!
 NUM_USERS = 15  # Number of concurrent users to test
 
 def spam_cards(username, worker_id):

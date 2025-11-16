@@ -7,7 +7,7 @@ Usage: python create_test_users.py
 import requests
 import sys
 
-BASE_URL = "http://54.226.2.146"
+BASE_URL = "http://54.226.152.231"
 NUM_USERS = 15
 PASSWORD = "password123test"  # 15 chars (meets 10-20 requirement)
 

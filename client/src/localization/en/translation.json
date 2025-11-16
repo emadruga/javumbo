@@ -77,7 +77,16 @@
     "renameDeck": "Rename Deck",
     "confirmDeleteCard": "Are you sure you want to delete this card?",
     "deleteCard": "Delete Card",
-    "noCards": "No cards in this deck yet."
+    "noCards": "No cards in this deck yet.",
+    "newDeckName": "New deck name",
+    "errorLoadingDecks": "Failed to load decks",
+    "errors": {
+      "nameRequired": "Deck name is required",
+      "nameTooLong": "Deck name must be 80 characters or less",
+      "nameUnchanged": "Please enter a different name",
+      "nameDuplicate": "A deck with this name already exists",
+      "renameFailed": "Failed to rename deck"
+    }
   },
   "cards": {
     "front": "Front",
@@ -92,7 +101,11 @@
     "errorAdding": "Error adding card. Please try again later.",
     "addSuccess": "Card added successfully!",
     "frontPlaceholder": "Enter the front of the card",
-    "backPlaceholder": "Enter the back of the card"
+    "backPlaceholder": "Enter the back of the card",
+    "adding": "Adding...",
+    "addingTo": "Adding cards to",
+    "deckChanged": "Now adding cards to {{deckName}}",
+    "cancel": "Cancel"
   },
   "review": {
     "title": "Review Cards",

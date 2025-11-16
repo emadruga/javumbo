@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Header from '../components/Header';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Pie } from 'react-chartjs-2';
@@ -51,6 +52,8 @@ const generateChartData = (counts) => {
 
 function DeckStatisticsPage({ user, onLogout }) {
   const { deckId } = useParams();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -104,7 +107,16 @@ function DeckStatisticsPage({ user, onLogout }) {
   return (
     <div className="container mt-4">
       <Header user={user} onLogout={onLogout} />
-      <h2>Statistics for {deckName}</h2>
+
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h2 className="mb-0">Statistics for {deckName}</h2>
+        <button
+          className="btn btn-secondary"
+          onClick={() => navigate('/decks')}
+        >
+          ← {t('stats.backToDecks')}
+        </button>
+      </div>
 
       {/* Loading/Error Display */}
       {loading && <p>Loading statistics...</p>}

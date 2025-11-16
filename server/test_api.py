@@ -221,9 +221,11 @@ class TestFlaskApi(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             data = json.loads(response.data)
             self.assertIsInstance(data, list)
-            self.assertEqual(len(data), 1)
-            # Assert against the name used during registration
-            self.assertEqual(data[0]['name'], "Verbal Tenses") 
+            self.assertEqual(len(data), 2)  # MyFirstDeck + Verbal Tenses
+            # Assert against the names used during registration
+            deck_names = [d['name'] for d in data]
+            self.assertIn("MyFirstDeck", deck_names)
+            self.assertIn("Verbal Tenses", deck_names) 
 
     def test_11_get_decks_unauthorized(self):
         response = self.client.get('/decks')
@@ -243,7 +245,7 @@ class TestFlaskApi(unittest.TestCase):
             decks_list_resp = c.get('/decks')
             decks_list_data = json.loads(decks_list_resp.data)
             self.assertTrue(any(d['name'] == "My New Deck" for d in decks_list_data))
-            self.assertEqual(len(decks_list_data), 2) # Default + new one
+            self.assertEqual(len(decks_list_data), 3) # MyFirstDeck + Verbal Tenses + new one
 
     def test_13_create_deck_duplicate_name(self):
          with self.client as c:
@@ -565,9 +567,9 @@ class TestFlaskApi(unittest.TestCase):
     def test_34a_get_deck_cards_pagination(self):
         with self.client as c:
             self._login_user("testuser", "password123")
-            
-            # Check that pagination parameters work
-            response = c.get('/decks/1/cards?page=1&perPage=1')
+
+            # Check that pagination parameters work (deck #2 has sample cards)
+            response = c.get('/decks/2/cards?page=1&perPage=1')
             self.assertEqual(response.status_code, 200)
             data = json.loads(response.data)
             self.assertEqual(data["pagination"]["perPage"], 1)

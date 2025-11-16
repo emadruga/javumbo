@@ -92,6 +92,33 @@ def sha1_checksum(data):
     """Calculates the SHA1 checksum for Anki note syncing."""
     return hashlib.sha1(data.encode('utf-8')).hexdigest()
 
+def get_card_state(card_type, queue, interval):
+    """
+    Map card type/queue/interval to human-readable state for logging.
+
+    Args:
+        card_type: Integer - 0=new, 1=learning, 2=review, 3=relearning
+        queue: Integer - -3=sched buried, -2=user buried, -1=suspended, 0=new, 1=learning, 2=review, 3=day learn, 4=preview
+        interval: Integer - days for review cards, used to distinguish Young vs Mature
+
+    Returns:
+        String - Human-readable card state
+    """
+    if queue == -3:
+        return "SchedBuried"
+    if queue == -2:
+        return "UserBuried"
+    if queue == -1:
+        return "Suspended"
+    if card_type == 0:
+        return "New"
+    if card_type == 1 or card_type == 3:
+        return "Learning" if queue == 1 else "Relearning"
+    if card_type == 2:
+        # Review cards: Young (<21 days) or Mature (>=21 days)
+        return "Young" if interval < 21 else "Mature"
+    return "Unknown"
+
 # --- Database Setup (Placeholders) ---
 # TODO: Implement functions to initialize admin and flashcard databases
 # TODO: Implement functions to get DB connections
@@ -239,13 +266,23 @@ def init_anki_db(db_path, user_name="Default User"):
         }
     }
     default_decks = {
-        "1": { # Deck ID 1 = Default deck
+        "1": { # Deck ID 1 = User's first empty deck
             "id": 1,
+            "name": "MyFirstDeck",
+            "mod": crt_time, "usn": -1,
+            "lrnToday": [0, 0], "revToday": [0, 0], "newToday": [0, 0],
+            "timeToday": [0, 0], "conf": 1, # Refers to dconf ID 1
+            "desc": "Your first flashcard deck",
+            "dyn": 0, "collapsed": False,
+             "extendNew": 10, "extendRev": 50
+        },
+        "2": { # Deck ID 2 = Sample cards deck
+            "id": 2,
             "name": "Verbal Tenses",
             "mod": crt_time, "usn": -1,
             "lrnToday": [0, 0], "revToday": [0, 0], "newToday": [0, 0],
             "timeToday": [0, 0], "conf": 1, # Refers to dconf ID 1
-            "desc": f"English verb tenses deck for {user_name}",
+            "desc": f"English verb tenses sample deck for {user_name}",
             "dyn": 0, "collapsed": False,
              "extendNew": 10, "extendRev": 50
         }
@@ -342,7 +379,7 @@ def register():
         # Create user flashcard database
         user_db_path = get_user_db_path(user_id)
         init_anki_db(user_db_path, user_name=name)
-        add_initial_flashcards(user_db_path, "1700000000001")  # Using fixed model ID from init
+        add_initial_flashcards(user_db_path, "1700000000001", deck_id=2)  # Sample cards go to deck #2
         
         return jsonify({
             "message": "User registered successfully",
@@ -1147,7 +1184,7 @@ def generate_ai_flashcards():
     
     return cards
 
-def add_initial_flashcards(db_path, model_id):
+def add_initial_flashcards(db_path, model_id, deck_id=1):
     """Adds the initial set of flashcards about verbal tenses to the user's Anki DB."""
     cards_to_add = generate_ai_flashcards()
     conn = None
@@ -1157,7 +1194,7 @@ def add_initial_flashcards(db_path, model_id):
 
         current_time_sec = int(time.time())
         current_time_ms = int(current_time_sec * 1000)
-        deck_id = 1 # Default deck
+        # deck_id is now passed as parameter
         usn = -1 # Local changes
 
         for i, (front, back) in enumerate(cards_to_add):
@@ -1698,10 +1735,29 @@ def answer_card():
             review_id, current_card_id, -1, ease, new_interval, current_interval,
             new_factor, time_taken, review_log_type # <-- Use calculated review_log_type
         ))
-        
+
+        # Enhanced logging for review with state transitions
+        # Get card front text for logging
+        cursor.execute("SELECT flds FROM notes WHERE id = ?", (current_note_id,))
+        note_data = cursor.fetchone()
+        front_text = "Unknown"
+        if note_data and note_data[0]:
+            fields = note_data[0].split('\x1f')
+            front_text = fields[0][:15] + "..." if len(fields[0]) > 15 else fields[0]
+
+        # Calculate old and new states
+        old_state = get_card_state(current_type, current_queue, current_interval)
+        new_state = get_card_state(new_type, new_queue, new_interval)
+
+        # Get username for logging
+        username = session.get('username', 'Unknown')
+
+        # Log the review with state transition
+        app.logger.info(f"User {user_id} ({username}) reviewed card {current_card_id} (\"{front_text}\") ease={ease}: {old_state} → {new_state}")
+
         # Update collection modification time
         cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
-        
+
         # Commit the changes
         conn.commit()
         
@@ -1885,7 +1941,22 @@ def add_new_card():
             0, 0, note_id, # type, queue, due
             0, 2500, 0, 0, 0, 0, 0, 0, "" # ivl, factor, reps, lapses, left, odue, odid, flags, data
         ))
-        app.logger.info(f"Inserted card {card_id} into deck {current_deck_id} for note {note_id}, user {user_id}") # Use logger
+        # Get deck name for enhanced logging
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        decks_data = cursor.fetchone()
+        deck_name = "Unknown"
+        if decks_data and decks_data['decks']:
+            decks_dict = json.loads(decks_data['decks'])
+            deck_name = decks_dict.get(str(current_deck_id), {}).get('name', 'Unknown')
+
+        # Get username for logging
+        username = session.get('username', 'Unknown')
+
+        # Truncate front text for logging
+        front_truncated = front[:15] + "..." if len(front) > 15 else front
+
+        # Enhanced logging with full context
+        app.logger.info(f"User {user_id} ({username}) created card {card_id} in deck {current_deck_id} ({deck_name}): \"{front_truncated}\"")
 
         # --- Update Collection Mod Time --- #
         cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
@@ -2281,39 +2352,69 @@ def delete_card(cardId):
     
     try:
         conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
-        # First, get the note ID for this card
-        cursor.execute("SELECT nid FROM cards WHERE id = ?", (cardId,))
-        result = cursor.fetchone()
-        
-        if not result:
+
+        # First, get card details for enhanced logging (BEFORE deletion)
+        cursor.execute("""
+            SELECT c.nid, c.did, c.type, c.queue, c.ivl, n.flds
+            FROM cards c
+            JOIN notes n ON c.nid = n.id
+            WHERE c.id = ?
+        """, (cardId,))
+        card_data = cursor.fetchone()
+
+        if not card_data:
             app.logger.warning(f"Card {cardId} not found")
             return jsonify({"error": "Card not found"}), 404
-        
-        note_id = result[0]
-        
+
+        note_id = card_data['nid']
+        deck_id = card_data['did']
+        card_type = card_data['type']
+        card_queue = card_data['queue']
+        card_interval = card_data['ivl']
+        fields = card_data['flds']
+
+        # Get deck name
+        cursor.execute("SELECT decks FROM col LIMIT 1")
+        decks_data = cursor.fetchone()
+        deck_name = "Unknown"
+        if decks_data and decks_data['decks']:
+            decks_dict = json.loads(decks_data['decks'])
+            deck_name = decks_dict.get(str(deck_id), {}).get('name', 'Unknown')
+
+        # Get card front text
+        field_list = fields.split('\x1f')
+        front_text = field_list[0][:15] + "..." if len(field_list[0]) > 15 else field_list[0]
+
+        # Get card state
+        card_state = get_card_state(card_type, card_queue, card_interval)
+
+        # Get username
+        username = session.get('username', 'Unknown')
+
         # Begin transaction
         conn.execute("BEGIN")
-        
+
         # Delete the card
         cursor.execute("DELETE FROM cards WHERE id = ?", (cardId,))
-        
+
         # Check if there are any other cards associated with this note
         cursor.execute("SELECT COUNT(*) FROM cards WHERE nid = ?", (note_id,))
         other_cards_count = cursor.fetchone()[0]
-        
+
         # If no other cards use this note, delete the note too
         if other_cards_count == 0:
             cursor.execute("DELETE FROM notes WHERE id = ?", (note_id,))
-        
+
         # Update collection modification time
         cursor.execute("UPDATE col SET mod = ?", (int(time.time() * 1000),))
-        
+
         # Commit the transaction
         conn.commit()
-        
-        app.logger.info(f"Successfully deleted card {cardId}")
+
+        # Enhanced logging AFTER successful commit
+        app.logger.info(f"User {user_id} ({username}) deleted card {cardId} from deck {deck_id} ({deck_name}): \"{front_text}\" [state: {card_state}]")
         return jsonify({"success": True, "message": "Card deleted successfully"})
         
     except Exception as e:
@@ -2396,8 +2497,11 @@ def delete_deck(deckId):
         
         # Commit the transaction
         conn.commit()
-        
-        app.logger.info(f"Successfully deleted deck '{deck_name}' with {card_count} cards")
+
+        # Enhanced logging with username
+        username = session.get('username', 'Unknown')
+        app.logger.info(f"User {user_id} ({username}) deleted deck {deckId} ({deck_name}) with {card_count} cards")
+
         return jsonify({
             "message": f"Deck '{deck_name}' and {card_count} cards deleted successfully"
         }), 200
