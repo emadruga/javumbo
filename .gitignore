@@ -30,6 +30,15 @@ server/admin.db
 server/user_dbs/
 server/flask_session/
 
+server_lambda/package/
+server_lambda/lambda_deployment*
+server_lambda/docs/Screenshot*
+server_lambda/docs/*pdf
+server_lambda/terraform/.terraform*
+
+client_lambda/node_modules/
+client_lambda/dist/
+
 # Environment variables file (if used later)
 .env*
 

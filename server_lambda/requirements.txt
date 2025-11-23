@@ -1,0 +1,21 @@
+# AWS SDK for Python (usually pre-installed in Lambda)
+boto3>=1.34.0
+
+# Password hashing (Day 5)
+bcrypt>=4.0.0
+
+# Flask framework + extensions (Day 7)
+Flask==3.0.0
+flask-cors==4.0.0
+flask-jwt-extended==4.6.0
+
+# Lambda WSGI adapter (Day 7)
+# awsgi is TRASH, Mangum is ASGI-only
+# Use apig-wsgi for Flask (WSGI)
+apig-wsgi==2.18.0
+
+# Testing
+pytest==7.4.3
+pytest-mock==3.12.0
+
+# Note: sqlite3 is built into Python standard library
