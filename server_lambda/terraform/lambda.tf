@@ -22,7 +22,7 @@ resource "aws_lambda_function" "api" {
   filename         = data.archive_file.lambda_placeholder.output_path
   function_name    = var.lambda_function_name
   role             = data.aws_iam_role.lab_role.arn
-  handler          = "lambda_function.handler"
+  handler          = "lambda_handler.handler"
   source_code_hash = data.archive_file.lambda_placeholder.output_base64sha256
   runtime          = "python3.11"
 
