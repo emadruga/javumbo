@@ -1856,7 +1856,7 @@ def serve_static(path):
     """
     # Initialize S3 client
     s3 = boto3.client('s3')
-    bucket_name = 'javumbo-frontend-prod'
+    bucket_name = os.environ.get('S3_FRONTEND_BUCKET', 'javumbo-frontend-prod')
 
     # If no path or root, serve index.html
     if not path or path == '':

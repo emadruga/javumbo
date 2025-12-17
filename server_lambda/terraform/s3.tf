@@ -54,3 +54,36 @@ resource "aws_s3_bucket_lifecycle_configuration" "user_dbs" {
     }
   }
 }
+
+# ============================================================================
+# S3 Bucket for Frontend Static Files
+# ============================================================================
+
+resource "aws_s3_bucket" "frontend" {
+  bucket = "${var.s3_frontend_bucket_name}-${data.aws_caller_identity.current.account_id}"
+
+  tags = {
+    Name = "Javumbo-Frontend"
+  }
+}
+
+# Block public access initially (Lambda will access it via IAM role)
+resource "aws_s3_bucket_public_access_block" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Enable server-side encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}

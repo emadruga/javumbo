@@ -10,6 +10,16 @@ output "s3_bucket_arn" {
   value       = aws_s3_bucket.user_dbs.arn
 }
 
+output "s3_frontend_bucket_name" {
+  description = "Name of the S3 bucket for frontend static files"
+  value       = aws_s3_bucket.frontend.id
+}
+
+output "s3_frontend_bucket_arn" {
+  description = "ARN of the frontend S3 bucket"
+  value       = aws_s3_bucket.frontend.arn
+}
+
 output "dynamodb_users_table_name" {
   description = "Name of the DynamoDB users table"
   value       = aws_dynamodb_table.users.name
@@ -56,11 +66,18 @@ output "deployment_summary" {
   value = {
     api_url                 = aws_apigatewayv2_api.http_api.api_endpoint
     lambda_function         = aws_lambda_function.api.function_name
-    s3_bucket               = aws_s3_bucket.user_dbs.id
+    s3_user_dbs_bucket      = aws_s3_bucket.user_dbs.id
+    s3_frontend_bucket      = aws_s3_bucket.frontend.id
     dynamodb_users_table    = aws_dynamodb_table.users.name
     dynamodb_locks_table    = aws_dynamodb_table.user_locks.name
     dynamodb_sessions_table = aws_dynamodb_table.sessions.name
     region                  = data.aws_region.current.name
     account_id              = data.aws_caller_identity.current.account_id
   }
+}
+
+# Convenience output for quick reference
+output "api_endpoint" {
+  description = "API Gateway endpoint (use this for API calls)"
+  value       = aws_apigatewayv2_api.http_api.api_endpoint
 }

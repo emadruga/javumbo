@@ -36,6 +36,7 @@ resource "aws_lambda_function" "api" {
   environment {
     variables = {
       S3_BUCKET               = aws_s3_bucket.user_dbs.id
+      S3_FRONTEND_BUCKET      = aws_s3_bucket.frontend.id
       DYNAMODB_USERS_TABLE    = aws_dynamodb_table.users.name
       DYNAMODB_LOCKS_TABLE    = aws_dynamodb_table.user_locks.name
       DYNAMODB_SESSIONS_TABLE = aws_dynamodb_table.sessions.name

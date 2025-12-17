@@ -24,6 +24,12 @@ variable "s3_bucket_name" {
   default     = "javumbo-user-dbs"
 }
 
+variable "s3_frontend_bucket_name" {
+  description = "S3 bucket name for frontend static files (must be globally unique)"
+  type        = string
+  default     = "javumbo-frontend-prod"
+}
+
 variable "dynamodb_users_table" {
   description = "DynamoDB table name for user authentication"
   type        = string
