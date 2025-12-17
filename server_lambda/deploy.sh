@@ -55,11 +55,17 @@ echo "📋 Terraform will create the following resources:"
 terraform plan -no-color | grep -E "(will be created|Plan:)" || true
 echo ""
 
-# Confirm deployment
-read -p "Continue with deployment? (yes/no): " CONFIRM
-if [ "$CONFIRM" != "yes" ]; then
-    echo "❌ Deployment cancelled"
-    exit 1
+# Check if running interactively or with AUTO_APPROVE environment variable
+if [ -t 0 ] && [ -z "$AUTO_APPROVE" ]; then
+    # Interactive mode - ask for confirmation
+    read -p "Continue with deployment? (yes/no): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "❌ Deployment cancelled"
+        exit 1
+    fi
+else
+    # Non-interactive mode or AUTO_APPROVE set - proceed automatically
+    echo "🚀 Proceeding with deployment (non-interactive mode or AUTO_APPROVE set)..."
 fi
 
 # Apply Terraform
