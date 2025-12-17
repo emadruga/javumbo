@@ -35,6 +35,8 @@ server_lambda/lambda_deployment*
 server_lambda/docs/Screenshot*
 server_lambda/docs/*pdf
 server_lambda/terraform/.terraform*
+server_lambda/deployments/
+server_lambda/terraform.tfstate
 
 client_lambda/node_modules/
 client_lambda/dist/
